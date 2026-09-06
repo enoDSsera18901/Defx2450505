@@ -25,6 +25,8 @@ jobs:
         run: npm run test:provider
       - name: Provider-trial evaluator tests
         run: npm run test:trial
+      - name: Landed-cost engine tests
+        run: npm run test:landed
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Production build
