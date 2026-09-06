@@ -1,10 +1,6 @@
-import { fingerprintSteoForecast } from './steo-revision';
+import { fingerprintSteoForecast, type ComparableSteoPoint } from './steo-revision';
 
-export type SteoBalancePoint = {
-  period: string;
-  supplyMbpd: number;
-  demandMbpd: number;
-  balanceMbpd: number;
+export type SteoBalancePoint = ComparableSteoPoint & {
   classification: 'forecast';
 };
 
@@ -23,7 +19,13 @@ function finiteNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function parseSteoBalance(rows: SteoRow[], currentPeriod = new Date().toISOString().slice(0, 7)) {
+/**
+ * Canonical paired values from the exact public EIA API response window.
+ *
+ * This deliberately has no forecast classification. It is the revision identity
+ * basis and therefore must not depend on the machine's current calendar month.
+ */
+export function parseSteoSourceWindow(rows: SteoRow[]): ComparableSteoPoint[] {
   const byPeriod = new Map<string, { supply?: number; demand?: number }>();
 
   for (const row of rows) {
@@ -37,15 +39,20 @@ export function parseSteoBalance(rows: SteoRow[], currentPeriod = new Date().toI
   }
 
   return [...byPeriod.entries()]
-    .filter(([period, values]) => period >= currentPeriod && values.supply !== undefined && values.demand !== undefined)
+    .filter(([, values]) => values.supply !== undefined && values.demand !== undefined)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([period, values]) => ({
       period,
       supplyMbpd: values.supply as number,
       demandMbpd: values.demand as number,
       balanceMbpd: Number(((values.supply as number) - (values.demand as number)).toFixed(2)),
-      classification: 'forecast' as const,
     }));
+}
+
+export function parseSteoBalance(rows: SteoRow[], currentPeriod = new Date().toISOString().slice(0, 7)): SteoBalancePoint[] {
+  return parseSteoSourceWindow(rows)
+    .filter((point) => point.period >= currentPeriod)
+    .map((point) => ({ ...point, classification: 'forecast' as const }));
 }
 
 export async function getSteoGlobalBalance() {
@@ -66,15 +73,18 @@ export async function getSteoGlobalBalance() {
 
   const json = await response.json();
   const rows = Array.isArray(json.response?.data) ? (json.response.data as SteoRow[]) : [];
+  const revisionBasis = parseSteoSourceWindow(rows);
   const forecast = parseSteoBalance(rows);
+  if (!revisionBasis.length) throw new Error('EIA STEO returned no paired world supply/demand source periods');
   if (!forecast.length) throw new Error('EIA STEO returned no paired world supply/demand forecast periods');
 
   return {
     source: 'U.S. Energy Information Administration (EIA) Short-Term Energy Outlook',
     sourceUrl: 'https://www.eia.gov/outlooks/steo/',
     retrievedAt: new Date().toISOString(),
-    revisionFingerprint: fingerprintSteoForecast(forecast),
-    revisionMethod: 'sha256 of sorted paired PAPR_WORLD/PATC_WORLD forecast values',
+    revisionFingerprint: fingerprintSteoForecast(revisionBasis),
+    revisionMethod: 'sha256 of sorted paired PAPR_WORLD/PATC_WORLD source response window values',
+    revisionBasis,
     seriesIds: { supply: SUPPLY_SERIES, demand: DEMAND_SERIES },
     unit: 'million barrels per day',
     forecast,

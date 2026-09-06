@@ -13,6 +13,8 @@
     "test:landed": "tsx --test tests/landed-cost.test.ts",
     "test:scenario": "tsx --test tests/landed-scenario.test.ts",
     "test:steo-revision": "tsx --test tests/steo-revision.test.ts",
+    "test:steo-archive": "tsx --test tests/steo-snapshot-store.test.ts",
+    "steo:capture": "tsx scripts/capture-steo-snapshot.ts",
     "trial:report": "tsx scripts/provider-trial-report.ts"
   },
   "dependencies": {

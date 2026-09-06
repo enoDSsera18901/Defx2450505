@@ -31,6 +31,8 @@ jobs:
         run: npm run test:scenario
       - name: STEO revision tracking tests
         run: npm run test:steo-revision
+      - name: STEO snapshot archive tests
+        run: npm run test:steo-archive
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Production build

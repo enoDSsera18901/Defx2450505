@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compareSteoForecasts, fingerprintSteoForecast } from '../lib/steo-revision';
+import { parseSteoBalance, parseSteoSourceWindow } from '../lib/steo';
 
 const previous = [
   { period: '2026-10', supplyMbpd: 105.2, demandMbpd: 104.9, balanceMbpd: 0.3 },
@@ -10,6 +11,29 @@ const previous = [
 test('fingerprint is deterministic across input ordering', () => {
   assert.equal(fingerprintSteoForecast(previous), fingerprintSteoForecast([...previous].reverse()));
   assert.match(fingerprintSteoForecast(previous), /^[a-f0-9]{64}$/);
+});
+
+test('paired source-window identity stays stable when only the local forecast cutoff month changes', () => {
+  const rows = [
+    { period: '2026-09', seriesId: 'PAPR_WORLD', value: 105.0 },
+    { period: '2026-09', seriesId: 'PATC_WORLD', value: 104.8 },
+    { period: '2026-10', seriesId: 'PAPR_WORLD', value: 105.2 },
+    { period: '2026-10', seriesId: 'PATC_WORLD', value: 104.9 },
+    { period: '2026-11', seriesId: 'PAPR_WORLD', value: 105.4 },
+    { period: '2026-11', seriesId: 'PATC_WORLD', value: 105.1 },
+  ];
+
+  const sourceWindow = parseSteoSourceWindow(rows);
+  const septemberForward = parseSteoBalance(rows, '2026-09');
+  const octoberForward = parseSteoBalance(rows, '2026-10');
+
+  assert.deepEqual(sourceWindow.map((point) => point.period), ['2026-09', '2026-10', '2026-11']);
+  assert.deepEqual(septemberForward.map((point) => point.period), ['2026-09', '2026-10', '2026-11']);
+  assert.deepEqual(octoberForward.map((point) => point.period), ['2026-10', '2026-11']);
+  assert.equal(
+    fingerprintSteoForecast(sourceWindow),
+    fingerprintSteoForecast(parseSteoSourceWindow([...rows].reverse())),
+  );
 });
 
 test('identical forecasts do not create a false revision', () => {
