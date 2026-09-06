@@ -41,6 +41,18 @@ function samePoint(a: ComparableSteoPoint, b: ComparableSteoPoint) {
   );
 }
 
+function balanceMatches(point: ComparableSteoPoint) {
+  return Number((point.supplyMbpd - point.demandMbpd).toFixed(2)) === point.balanceMbpd;
+}
+
+function validateBalances(points: ComparableSteoPoint[], label: string, errors: string[]) {
+  for (const point of points) {
+    if (!balanceMatches(point)) {
+      errors.push(`${label} period ${point.period} balanceMbpd must equal supplyMbpd minus demandMbpd rounded to 2 decimals`);
+    }
+  }
+}
+
 export function validateSteoSnapshot(snapshot: SteoSnapshot): string[] {
   const errors: string[] = [];
   if (!snapshot || typeof snapshot !== 'object') return ['snapshot must be an object'];
@@ -57,6 +69,7 @@ export function validateSteoSnapshot(snapshot: SteoSnapshot): string[] {
   if (!Array.isArray(snapshot.revisionBasis) || snapshot.revisionBasis.length === 0) {
     errors.push('revisionBasis must contain at least one paired source period');
   } else {
+    validateBalances(snapshot.revisionBasis, 'revisionBasis', errors);
     try {
       const calculated = fingerprintSteoForecast(snapshot.revisionBasis);
       if (calculated !== snapshot.revisionFingerprint) {
@@ -70,6 +83,7 @@ export function validateSteoSnapshot(snapshot: SteoSnapshot): string[] {
   if (!Array.isArray(snapshot.forecast) || snapshot.forecast.length === 0) {
     errors.push('forecast must contain at least one period');
   } else {
+    validateBalances(snapshot.forecast, 'forecast', errors);
     if (snapshot.forecast.some((point) => point.classification !== 'forecast')) {
       errors.push('every snapshot forecast point must be labelled forecast');
     }
