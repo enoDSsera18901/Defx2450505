@@ -29,6 +29,8 @@ jobs:
         run: npm run test:landed
       - name: Scenario-lab adapter tests
         run: npm run test:scenario
+      - name: STEO revision tracking tests
+        run: npm run test:steo-revision
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Production build
