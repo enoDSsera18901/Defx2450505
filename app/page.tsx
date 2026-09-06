@@ -62,6 +62,7 @@ export default function Home() {
                 <span className="navDot" />{item}
               </a>
             ))}
+            <a className="navItem" href="/scenarios"><span className="navDot" />Scenario Lab</a>
           </nav>
         </div>
         <div className="sideFooter">
@@ -172,7 +173,9 @@ export default function Home() {
 
           <article className="card" id="landed-cost">
             <div className="sectionHead"><div><p className="eyebrow">DELIVERED ECONOMICS</p><h2>Landed cost</h2></div><span className="status">NO DATA</span></div>
-            <div className="availability"><span>Delivered cost comparison</span><strong>Not calculated</strong><small>No current freight, insurance, port-fee or route inputs are connected. Missing components are not silently replaced with zero or demonstration values.</small></div>
+            <div className="availability"><span>Live delivered cost comparison</span><strong>Not calculated</strong><small>No current freight, insurance, port-fee or route inputs are connected. Missing components are not silently replaced with zero or demonstration values.</small></div>
+            <a className="ghost" href="/scenarios" style={{ display: 'inline-flex', marginTop: 14, textDecoration: 'none' }}>Open Scenario Lab →</a>
+            <p className="subtle" style={{ marginTop: 9 }}>Scenario Lab uses explicit assumptions and does not change this live card from NO DATA.</p>
           </article>
         </section>
 
@@ -186,7 +189,7 @@ export default function Home() {
           </div>
         </section>
 
-        <footer>LASTBARREL · EIA PRICES + INVENTORIES LIVE WHEN AVAILABLE · EIA STEO GLOBAL BALANCE FORECAST · CARGOES AND LANDED COST NO-DATA UNTIL PROVIDERS ARE CONNECTED</footer>
+        <footer>LASTBARREL · EIA PRICES + INVENTORIES LIVE WHEN AVAILABLE · EIA STEO GLOBAL BALANCE FORECAST · LIVE CARGOES AND LANDED COST REMAIN NO-DATA · SCENARIO LAB AVAILABLE FOR EXPLICIT ASSUMPTIONS</footer>
       </section>
     </main>
   );
