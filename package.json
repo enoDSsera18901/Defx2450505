@@ -15,9 +15,9 @@
     "trial:report": "tsx scripts/provider-trial-report.ts"
   },
   "dependencies": {
-    "next": "15.2.4",
-    "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "next": "15.5.24",
+    "react": "19.0.8",
+    "react-dom": "19.0.8"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
