@@ -161,17 +161,21 @@ export function validateFreightQuery(query: FreightQuery): string[] {
 export function validateProviderDefinition(provider: PhysicalOilProvider): string[] {
   const errors: string[] = [];
   if (!nonEmpty(provider.id)) errors.push('provider.id is required');
-  if (!Array.isArray(provider.capabilities)) {
+
+  const rawCapabilities: unknown = provider.capabilities;
+  if (!Array.isArray(rawCapabilities)) {
     errors.push('provider.capabilities must be an array');
     return errors;
   }
 
-  const seen = new Set<string>();
-  provider.capabilities.forEach((capability) => {
-    if (!oneOf(capability, PROVIDER_CAPABILITIES)) {
-      errors.push(`provider capability ${String(capability)} is invalid`);
+  const seen = new Set<ProviderCapability>();
+  rawCapabilities.forEach((rawCapability) => {
+    if (!oneOf(rawCapability, PROVIDER_CAPABILITIES)) {
+      errors.push(`provider capability ${String(rawCapability)} is invalid`);
       return;
     }
+
+    const capability = rawCapability as ProviderCapability;
     if (seen.has(capability)) errors.push(`provider capability ${capability} is duplicated`);
     seen.add(capability);
 
