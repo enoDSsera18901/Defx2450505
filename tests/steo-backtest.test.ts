@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { backtestSteoVintages } from '../lib/steo-backtest';
+import { backtestSteoComparableVintages, backtestSteoVintages } from '../lib/steo-backtest';
 import { fingerprintSteoForecast, type ComparableSteoPoint } from '../lib/steo-revision';
 import type { SteoSnapshot } from '../lib/steo-snapshot-store';
 
@@ -103,16 +103,46 @@ test('reports baseline periods that are absent from the later archived source wi
   assert.equal(result.metrics, null);
 });
 
-test('rejects reverse chronology and same-revision pseudo backtests', () => {
+test('rejects reverse chronology and same source-vintage pseudo backtests', () => {
   const baseline = snapshot('2026-09-07T01:00:00Z', baselineBasis, ['2026-10']);
   const laterSameRevision = { ...baseline, retrievedAt: '2026-09-08T01:00:00Z' };
 
   assert.throws(
     () => backtestSteoVintages(baseline, { ...baseline, retrievedAt: '2026-09-06T01:00:00Z' }),
-    /reference snapshot must be later/,
+    /reference vintage must be later/,
   );
   assert.throws(
     () => backtestSteoVintages(baseline, laterSameRevision),
-    /requires two distinct archived source revisions/,
+    /requires two distinct source vintages/,
   );
+});
+
+test('allows two distinct official source artifacts with identical paired-value fingerprints', () => {
+  const revisionBasis: ComparableSteoPoint[] = [
+    { period: '2026-02', supplyMbpd: 101, demandMbpd: 100, balanceMbpd: 1 },
+    { period: '2026-03', supplyMbpd: 102, demandMbpd: 101, balanceMbpd: 1 },
+  ];
+  const fingerprint = fingerprintSteoForecast(revisionBasis);
+  const forecast = revisionBasis.map((point) => ({ ...point, classification: 'forecast' as const }));
+
+  const result = backtestSteoComparableVintages(
+    {
+      vintageId: `official-xlsx:${'a'.repeat(64)}`,
+      vintageDate: '2026-01-13',
+      revisionFingerprint: fingerprint,
+      revisionBasis,
+      forecast,
+    },
+    {
+      vintageId: `official-xlsx:${'b'.repeat(64)}`,
+      vintageDate: '2026-02-10',
+      revisionFingerprint: fingerprint,
+      revisionBasis,
+      forecast,
+    },
+  );
+
+  assert.equal(result.baselineFingerprint, result.referenceFingerprint);
+  assert.equal(result.continuingForecastComparisons.length, 2);
+  assert.ok(result.continuingForecastComparisons.every((point) => point.deltaSupplyMbpd === 0 && point.deltaDemandMbpd === 0));
 });
