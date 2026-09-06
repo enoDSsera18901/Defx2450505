@@ -11,6 +11,7 @@ async function main() {
     retrievedAt: live.retrievedAt,
     revisionFingerprint: live.revisionFingerprint,
     revisionMethod: live.revisionMethod,
+    revisionBasis: live.revisionBasis,
     seriesIds: live.seriesIds,
     unit: live.unit,
     forecast: live.forecast,
@@ -22,6 +23,7 @@ async function main() {
     fingerprint: result.fingerprint,
     path: result.path,
     retrievedAt: snapshot.retrievedAt,
+    revisionBasisPeriods: snapshot.revisionBasis.length,
     forecastPeriods: snapshot.forecast.length,
     source: snapshot.source,
   }, null, 2));
