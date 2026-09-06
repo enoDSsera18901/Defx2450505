@@ -68,8 +68,8 @@ jobs:
       - name: Import Jan-Aug official STEO vintages and backtest
         run: |
           rm -rf /tmp/steo-official-vintages
-          npm run steo:import-official -- 2026 /tmp/steo-official-vintages > /tmp/steo-official-import.json
-          npm run steo:backtest-official -- 2026-01 2026-08 /tmp/steo-official-vintages > /tmp/steo-official-backtest.json
+          npx tsx scripts/import-steo-official-vintages.ts 2026 /tmp/steo-official-vintages > /tmp/steo-official-import.json
+          npx tsx scripts/backtest-steo-official-vintages.ts 2026-01 2026-08 /tmp/steo-official-vintages > /tmp/steo-official-backtest.json
           node <<'NODE'
           const fs = require('node:fs');
           const fail = (message) => { throw new Error(message); };
