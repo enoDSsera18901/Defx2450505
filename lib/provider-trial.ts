@@ -49,6 +49,7 @@ const KINDS: ObservationKind[] = ['vessel', 'cargo', 'port_event', 'route', 'fre
 const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const validIso = (value: unknown): value is string => nonEmpty(value) && !Number.isNaN(Date.parse(value));
 const finitePositive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0;
+const supportedKind = (value: unknown): value is ObservationKind => typeof value === 'string' && KINDS.includes(value as ObservationKind);
 
 function pct(numerator: number, denominator: number): number | null {
   return denominator === 0 ? null : (numerator / denominator) * 100;
@@ -65,44 +66,62 @@ function cargoRouteKey(record: Extract<PhysicalObservation, { kind: 'cargo' }>):
   return `${origin.trim().toLowerCase()}->${destination.trim().toLowerCase()}`;
 }
 
-export function evaluateProviderTrial(dataset: ProviderTrialDataset): ProviderTrialReport {
+export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
   const errors: string[] = [];
-  if (!nonEmpty(dataset.providerId)) errors.push('providerId is required');
-  if (!validIso(dataset.capturedAt)) errors.push('capturedAt must be an ISO-compatible timestamp');
-  if (!dataset.freshnessThresholdHours || typeof dataset.freshnessThresholdHours !== 'object') {
+  const raw = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+  const providerId = typeof raw.providerId === 'string' ? raw.providerId : '';
+  const capturedAt = typeof raw.capturedAt === 'string' ? raw.capturedAt : '';
+  const rawThresholds =
+    raw.freshnessThresholdHours && typeof raw.freshnessThresholdHours === 'object' && !Array.isArray(raw.freshnessThresholdHours)
+      ? (raw.freshnessThresholdHours as Partial<Record<ObservationKind, unknown>>)
+      : null;
+  const rawRecords = Array.isArray(raw.records) ? raw.records : [];
+
+  if (!nonEmpty(providerId)) errors.push('providerId is required');
+  if (!validIso(capturedAt)) errors.push('capturedAt must be an ISO-compatible timestamp');
+  if (!rawThresholds) {
     errors.push('freshnessThresholdHours is required');
   } else {
     for (const kind of KINDS) {
-      if (!finitePositive(dataset.freshnessThresholdHours[kind])) {
+      if (!finitePositive(rawThresholds[kind])) {
         errors.push(`freshnessThresholdHours.${kind} must be > 0`);
       }
     }
   }
-  if (!Array.isArray(dataset.records)) errors.push('records must be an array');
+  if (!Array.isArray(raw.records)) errors.push('records must be an array');
 
-  const recordCounts = {
+  const recordCounts: ProviderTrialReport['recordCounts'] = {
     vessel: 0,
     cargo: 0,
     port_event: 0,
     route: 0,
     freight: 0,
-    total: Array.isArray(dataset.records) ? dataset.records.length : 0,
+    total: rawRecords.length,
     vesselAndCargo: 0,
   };
-  const freshness = { fresh: 0, stale: 0, unknown: 0, future: 0 };
+  const freshness: Record<FreshnessStatus, number> = { fresh: 0, stale: 0, unknown: 0, future: 0 };
+  const records: PhysicalObservation[] = [];
 
-  const records = Array.isArray(dataset.records) ? dataset.records : [];
-  records.forEach((record, index) => {
-    if (!record || typeof record !== 'object' || !KINDS.includes(record.kind)) {
+  rawRecords.forEach((rawRecord, index) => {
+    if (!rawRecord || typeof rawRecord !== 'object') {
       errors.push(`records[${index}] is not a supported canonical physical observation`);
       return;
     }
 
+    const candidate = rawRecord as { kind?: unknown; provenance?: unknown };
+    if (!supportedKind(candidate.kind)) {
+      errors.push(`records[${index}] is not a supported canonical physical observation`);
+      return;
+    }
+
+    const record = rawRecord as PhysicalObservation;
+    records.push(record);
     recordCounts[record.kind] += 1;
     if (record.kind === 'vessel' || record.kind === 'cargo') recordCounts.vesselAndCargo += 1;
 
-    if (!record.provenance || record.provenance.provider !== dataset.providerId) {
-      errors.push(`records[${index}] provider provenance does not match ${dataset.providerId}`);
+    const provenance = candidate.provenance;
+    if (!provenance || typeof provenance !== 'object' || (provenance as { provider?: unknown }).provider !== providerId) {
+      errors.push(`records[${index}] provider provenance does not match ${providerId}`);
     }
 
     try {
@@ -111,21 +130,25 @@ export function evaluateProviderTrial(dataset: ProviderTrialDataset): ProviderTr
       errors.push(`records[${index}] could not be validated: ${error instanceof Error ? error.message : 'unknown error'}`);
     }
 
-    const threshold = dataset.freshnessThresholdHours?.[record.kind];
-    if (validIso(dataset.capturedAt) && finitePositive(threshold)) {
-      const assessment = assessObservationFreshness(record, dataset.capturedAt, threshold);
-      freshness[assessment.status] += 1;
+    const threshold = rawThresholds?.[record.kind];
+    if (validIso(capturedAt) && finitePositive(threshold)) {
+      try {
+        const assessment = assessObservationFreshness(record, capturedAt, threshold);
+        freshness[assessment.status] += 1;
+      } catch (error) {
+        errors.push(`records[${index}] freshness could not be assessed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      }
     }
   });
 
-  const cargoes = records.filter((record): record is Extract<PhysicalObservation, { kind: 'cargo' }> => record?.kind === 'cargo');
+  const cargoes = records.filter((record): record is Extract<PhysicalObservation, { kind: 'cargo' }> => record.kind === 'cargo');
   const withCommodity = cargoes.filter((record) => nonEmpty(record.commodity?.value)).length;
   const withGrade = cargoes.filter((record) => nonEmpty(record.grade?.value)).length;
   const withQuantity = cargoes.filter((record) => record.quantity != null).length;
   const withDestination = cargoes.filter((record) => nonEmpty(cargoDestination(record))).length;
   const delivered = cargoes.filter((record) => record.state?.value === 'delivered').length;
 
-  const routeRecords = records.filter((record): record is Extract<PhysicalObservation, { kind: 'route' }> => record?.kind === 'route');
+  const routeRecords = records.filter((record): record is Extract<PhysicalObservation, { kind: 'route' }> => record.kind === 'route');
   const ambiguousCargoes = cargoes.filter((record) => !nonEmpty(cargoDestination(record))).length;
   const ambiguousRoutes = routeRecords.filter(
     (record) => !nonEmpty(record.destination?.value) || record.routeState?.value === 'unknown' || record.routeState?.value === 'diverted',
@@ -194,8 +217,8 @@ export function evaluateProviderTrial(dataset: ProviderTrialDataset): ProviderTr
   ];
 
   return {
-    providerId: dataset.providerId,
-    capturedAt: dataset.capturedAt,
+    providerId,
+    capturedAt,
     recordCounts,
     cargoCoverage,
     freshness,
