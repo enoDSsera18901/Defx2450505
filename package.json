@@ -12,6 +12,7 @@
     "test:trial": "tsx --test tests/provider-trial.test.ts",
     "test:landed": "tsx --test tests/landed-cost.test.ts",
     "test:scenario": "tsx --test tests/landed-scenario.test.ts",
+    "test:steo-revision": "tsx --test tests/steo-revision.test.ts",
     "trial:report": "tsx scripts/provider-trial-report.ts"
   },
   "dependencies": {
