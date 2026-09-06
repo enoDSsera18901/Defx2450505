@@ -2,90 +2,33 @@
 
 Oil-market intelligence dashboard inspired by the LastDrop interaction pattern.
 
-## MVP scope
+## Current milestone
 
-The current build includes:
+The dashboard now connects server-side to the public EIA API:
 
-- benchmark crude price cards;
-- current physical supply and demand balance;
-- forward supply/demand outlook;
-- cargoes en route with volume, ETA and disruption status;
-- landed-cost comparison by crude grade and origin;
-- explainable confidence assessment;
-- responsive desktop/mobile dashboard shell.
+- Brent monthly spot price history (RBRTE);
+- WTI monthly spot price history (RWTC);
+- U.S. crude ending stocks excluding SPR, weekly (WCESTUS1);
+- source URL, observation dates, freshness metadata and a data-derived confidence input;
+- graceful demo fallback when EIA is unavailable.
 
-All market values currently shown in the UI are **demonstration data**, not live observations.
+Brent and WTI cards and the inventory history are live when the API responds. Dubai, Murban, current global supply/demand, forward balance, cargoes and landed cost remain clearly labelled demonstration data.
+
+The adapter uses EIA_API_KEY when provided and otherwise uses EIA's public demo key. Production deployments should provide an EIA key and add persistence/revision tracking.
 
 ## Confidence model
 
-`lib/confidence.ts` contains a deterministic confidence engine using:
+lib/confidence.ts contains a deterministic, auditable 0-100 evidence-quality score using freshness, source agreement, physical coverage, forecast stability and disruption risk. It is not a probability forecast. The current EIA adapter derives freshness from the latest inventory observation; agreement and physical-coverage values remain conservative configured inputs until independent sources and AIS are connected.
 
-- source freshness — 22%;
-- source agreement — 25%;
-- physical coverage — 23%;
-- forecast stability — 20%;
-- resolved disruption risk — 10%.
+## Remaining roadmap
 
-The score is designed as an auditable evidence-quality indicator, **not a probability forecast**.
-
-## Recommended live data architecture
-
-### Prices
-
-Use licensed or permitted benchmark feeds where available. Public fallback inputs can include EIA series for relevant spot/reference prices.
-
-### Current supply and demand
-
-Candidate sources:
-
-- US EIA;
-- OPEC Monthly Oil Market Report;
-- IEA Oil Market Report where licensing permits;
-- national statistical agencies and energy ministries.
-
-Normalise observations into a common daily/monthly time-series model and retain source timestamps and revisions.
-
-### Cargoes and availability
-
-A production version needs vessel/AIS and loading-program data. AIS coverage normally requires a commercial maritime data provider for reliable cargo identification, routing and ETA analytics.
-
-Each cargo record should preserve:
-
-- vessel / IMO;
-- crude grade;
-- origin and destination;
-- load/discharge terminal;
-- estimated volume;
-- departure and ETA;
-- route state;
-- source timestamp;
-- confidence / ambiguity flags.
-
-### Landed cost
-
-Calculate delivered crude economics from:
-
-`FOB crude price + freight + insurance/fees + route-specific adjustments`
-
-Freight should ultimately incorporate vessel class, route, bunker cost, canal charges, congestion and sanctions/compliance constraints where relevant.
-
-### Future supply
-
-Model announced production changes, project ramp-ups, maintenance, OPEC+ quotas/voluntary adjustments, field decline, outages and scenario assumptions. Every forward observation should keep a source, effective date, uncertainty range and confidence score.
-
-## Next build steps
-
-1. Add a server-side data-provider interface and persistent time-series schema.
-2. Connect public EIA data for benchmark pricing and US supply/inventory fundamentals.
-3. Add OPEC/IEA ingestion adapters for global balance inputs.
-4. Select an AIS/maritime provider for cargo tracking.
-5. Add historical backtesting so confidence weights can be calibrated against forecast error.
-6. Add scenario controls and alert thresholds.
-7. Replace all demonstration values in `app/page.tsx` with provider-backed observations.
+1. Add EIA/STEO production and demand adapters and replace the global balance demo values.
+2. Add OPEC/IEA ingestion where licensing permits, with persistence and revision history.
+3. Select a commercial AIS/maritime provider for cargo tracking, route state and ETA analytics.
+4. Replace demonstration landed-cost inputs with freight, insurance, fees and route adjustments.
+5. Add backtesting, scenario controls and alert thresholds.
 
 ## Run locally
 
-```bash
-npm install
-npm run dev
-```
+    npm install
+    npm run dev
