@@ -163,3 +163,14 @@ test('does not confuse missing cargo destinations with destination coverage', ()
   assert.equal(report.cargoCoverage.destinationCoveragePct, (11 / 12) * 100);
   assert.equal(report.cargoCoverage.missingOrAmbiguousDestination, 1);
 });
+
+test('fails closed on malformed top-level JSON rather than throwing', () => {
+  const report = evaluateProviderTrial(null);
+
+  assert.ok(report.errors.some((error) => error.includes('providerId')));
+  assert.ok(report.errors.some((error) => error.includes('capturedAt')));
+  assert.ok(report.errors.some((error) => error.includes('freshnessThresholdHours')));
+  assert.ok(report.errors.some((error) => error.includes('records')));
+  assert.equal(report.recordCounts.total, 0);
+  assert.equal(report.evidenceComplete, false);
+});
