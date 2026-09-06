@@ -33,6 +33,8 @@ jobs:
         run: npm run test:steo-revision
       - name: STEO snapshot archive tests
         run: npm run test:steo-archive
+      - name: STEO vintage backtest tests
+        run: npm run test:steo-backtest
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Production build
