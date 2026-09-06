@@ -23,6 +23,8 @@ jobs:
         run: npm run test:physical
       - name: Provider-adapter contract tests
         run: npm run test:provider
+      - name: Provider-trial evaluator tests
+        run: npm run test:trial
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Production build
