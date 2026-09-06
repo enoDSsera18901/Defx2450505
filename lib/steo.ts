@@ -1,3 +1,5 @@
+import { fingerprintSteoForecast } from './steo-revision';
+
 export type SteoBalancePoint = {
   period: string;
   supplyMbpd: number;
@@ -71,6 +73,8 @@ export async function getSteoGlobalBalance() {
     source: 'U.S. Energy Information Administration (EIA) Short-Term Energy Outlook',
     sourceUrl: 'https://www.eia.gov/outlooks/steo/',
     retrievedAt: new Date().toISOString(),
+    revisionFingerprint: fingerprintSteoForecast(forecast),
+    revisionMethod: 'sha256 of sorted paired PAPR_WORLD/PATC_WORLD forecast values',
     seriesIds: { supply: SUPPLY_SERIES, demand: DEMAND_SERIES },
     unit: 'million barrels per day',
     forecast,
