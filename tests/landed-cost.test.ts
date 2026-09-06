@@ -71,6 +71,19 @@ test('fails closed when a required freight component is unavailable', () => {
   assert.ok(result.errors.some((error) => error.includes('freight must be available')));
 });
 
+test('fails closed when a route-dependent optional cost is applicable but unavailable', () => {
+  const input = replace(baseInput(), 'canal_toll', {
+    status: 'unavailable',
+    reason: 'Route may transit Suez but no auditable toll basis is available.',
+  });
+  const result = calculateLandedCost(input);
+
+  assert.equal(result.status, 'incomplete');
+  if (result.status !== 'incomplete') return;
+  assert.ok(result.unavailableComponentKinds.includes('canal_toll'));
+  assert.ok(result.errors.some((error) => error.includes('canal_toll is unavailable')));
+});
+
 test('does not allow a required component to hide behind not_applicable', () => {
   const input = replace(baseInput(), 'insurance', {
     status: 'not_applicable',
