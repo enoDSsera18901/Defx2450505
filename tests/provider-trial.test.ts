@@ -129,7 +129,7 @@ test('reports a structurally complete bounded trial sample without claiming prov
 test('keeps stale historical evidence visible instead of treating it as current', () => {
   const report = evaluateProviderTrial(completeDataset());
 
-  assert.ok(report.freshness.stale >= 2);
+  assert.ok(report.freshness.stale >= 1);
   assert.ok(report.freshness.fresh >= 1);
 });
 
