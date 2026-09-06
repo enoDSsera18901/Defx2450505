@@ -15,14 +15,18 @@
     "test:steo-revision": "tsx --test tests/steo-revision.test.ts",
     "test:steo-archive": "tsx --test tests/steo-snapshot-store.test.ts",
     "test:steo-backtest": "tsx --test tests/steo-backtest.test.ts",
+    "test:steo-official": "tsx --test tests/steo-official-vintage.test.ts tests/steo-official-vintage-integrity.test.ts",
     "steo:capture": "tsx scripts/capture-steo-snapshot.ts",
     "steo:backtest": "tsx scripts/backtest-steo-snapshots.ts",
+    "steo:import-official": "tsx scripts/import-steo-official-vintages.ts",
+    "steo:backtest-official": "tsx scripts/backtest-steo-official-vintages.ts",
     "trial:report": "tsx scripts/provider-trial-report.ts"
   },
   "dependencies": {
     "next": "15.5.24",
     "react": "19.0.8",
-    "react-dom": "19.0.8"
+    "react-dom": "19.0.8",
+    "read-excel-file": "9.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -35,6 +35,8 @@ jobs:
         run: npm run test:steo-archive
       - name: STEO vintage backtest tests
         run: npm run test:steo-backtest
+      - name: Official STEO vintage tests
+        run: npm run test:steo-official
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Production build

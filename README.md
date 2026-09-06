@@ -19,7 +19,27 @@ Dubai, Murban and cargo/vessel intelligence remain **no-data** in the live view 
 
 The `/scenarios` workspace exercises the fail-closed landed-cost engine without pretending commercial maritime inputs are live. It may use a current public EIA Brent observation as the crude basis; freight, insurance, fees, differentials and route-dependent costs entered by the user remain explicitly labelled scenario assumptions. Missing applicable inputs produce no total.
 
-The adapter uses `EIA_API_KEY` when provided and otherwise uses EIA's public demo key. Production deployments should provide an EIA key and add persistence/revision tracking.
+The adapter uses `EIA_API_KEY` when provided and otherwise uses EIA's public demo key. Production deployments should provide an EIA key.
+
+## STEO reproducibility and backtesting
+
+LastBarrel now separates live retrieval snapshots from official historical EIA STEO workbook vintages.
+
+The official-vintage importer preserves the release date, modeling-completion date, canonical EIA workbook URL/name, raw XLSX SHA-256, source-native historical/forecast boundary, paired `PAPR_WORLD`/`PATC_WORLD` values and a separate value fingerprint. Historical-labelled workbook values remain `historical-public-estimate`; they are not promoted to observed physical-flow actuals.
+
+Import configured official 2026 vintages:
+
+```bash
+npm run steo:import-official -- 2026
+```
+
+Backtest January against August:
+
+```bash
+npm run steo:backtest-official -- 2026-01 2026-08
+```
+
+See `docs/steo-backtesting.md` for evidence classifications, provenance requirements, selection semantics and limitations.
 
 ## Confidence model
 
@@ -37,14 +57,17 @@ These define evidence classes, vessel/cargo separation, ETA and landed-cost sema
 
 ## Remaining roadmap
 
-1. Add EIA/STEO revision persistence and historical backtesting of forecast balance.
-2. Expand public-source intelligence where licensing and source semantics permit, preserving source disagreement rather than silently averaging.
-3. Continue building provider-neutral physical-oil and landed-cost infrastructure without enabling commercial-data features yet.
-4. Add confidence scoring only when physical coverage is sufficient and every factor is evidence-backed and explainable.
+1. Complete and retain a real official-vintage STEO history/backtest dataset with reproducible source identities.
+2. Strengthen landed-cost sensitivity/scenario comparison while keeping every non-public commercial input explicit.
+3. Expand public-source intelligence where licensing and source semantics permit, preserving source disagreement rather than silently averaging.
+4. Continue building provider-neutral physical-oil infrastructure without enabling commercial-data features yet.
+5. Add confidence scoring only when physical coverage is sufficient and every factor is evidence-backed and explainable.
 
 Commercial maritime/provider data is intentionally deferred while the product is still being built.
 
 ## Run locally
 
-    npm install
-    npm run dev
+```bash
+npm install
+npm run dev
+```

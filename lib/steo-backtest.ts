@@ -1,5 +1,5 @@
 import { assertSteoSnapshot, type SteoSnapshot } from './steo-snapshot-store';
-import type { ComparableSteoPoint } from './steo-revision';
+import { fingerprintSteoForecast, type ComparableSteoPoint } from './steo-revision';
 
 export type LaterVintageEstimateComparison = {
   period: string;
@@ -34,17 +34,32 @@ export type SteoLaterEstimateMetrics = {
   meanAbsoluteDeltaBalanceMbpd: number;
 };
 
+export type SteoComparableVintage = {
+  vintageId: string;
+  vintageDate: string;
+  revisionFingerprint: string;
+  revisionBasis: ComparableSteoPoint[];
+  forecast: Array<ComparableSteoPoint & { classification: 'forecast' }>;
+};
+
 export type SteoVintageBacktest = {
   method: 'forecast-vs-later-vintage-public-estimate';
+  baselineVintageId: string;
+  referenceVintageId: string;
+  baselineVintageDate: string;
+  referenceVintageDate: string;
   baselineFingerprint: string;
   referenceFingerprint: string;
-  baselineRetrievedAt: string;
-  referenceRetrievedAt: string;
   laterEstimateComparisons: LaterVintageEstimateComparison[];
   continuingForecastComparisons: ContinuingForecastComparison[];
   missingReferencePeriods: string[];
   metrics: SteoLaterEstimateMetrics | null;
   limitations: string[];
+};
+
+export type SteoSnapshotBacktest = SteoVintageBacktest & {
+  baselineRetrievedAt: string;
+  referenceRetrievedAt: string;
 };
 
 function round(value: number) {
@@ -66,6 +81,27 @@ function pointWithoutClassification(point: ComparableSteoPoint): ComparableSteoP
     demandMbpd: point.demandMbpd,
     balanceMbpd: point.balanceMbpd,
   };
+}
+
+function samePoint(a: ComparableSteoPoint, b: ComparableSteoPoint) {
+  return a.period === b.period && a.supplyMbpd === b.supplyMbpd && a.demandMbpd === b.demandMbpd && a.balanceMbpd === b.balanceMbpd;
+}
+
+function assertComparableVintage(vintage: SteoComparableVintage, label: string) {
+  if (!vintage.vintageId?.trim()) throw new Error(`${label} STEO vintage must have a stable vintageId`);
+  if (Number.isNaN(Date.parse(vintage.vintageDate))) throw new Error(`${label} STEO vintageDate must be date-compatible`);
+  if (!Array.isArray(vintage.revisionBasis) || !vintage.revisionBasis.length) throw new Error(`${label} STEO vintage has no revisionBasis`);
+  if (!Array.isArray(vintage.forecast) || !vintage.forecast.length) throw new Error(`${label} STEO vintage has no forecast periods`);
+  if (fingerprintSteoForecast(vintage.revisionBasis) !== vintage.revisionFingerprint) {
+    throw new Error(`${label} STEO revisionFingerprint does not match revisionBasis`);
+  }
+  const basisByPeriod = new Map(vintage.revisionBasis.map((point) => [point.period, point]));
+  for (const point of vintage.forecast) {
+    if (point.classification !== 'forecast') throw new Error(`${label} STEO forward point ${point.period} is not labelled forecast`);
+    const basis = basisByPeriod.get(point.period);
+    if (!basis || !samePoint(point, basis)) throw new Error(`${label} STEO forecast period ${point.period} does not match revisionBasis`);
+  }
+  return vintage;
 }
 
 function laterEstimateComparison(
@@ -120,28 +156,24 @@ function metrics(comparisons: LaterVintageEstimateComparison[]): SteoLaterEstima
 }
 
 /**
- * Compare an archived forecast vintage with a later archived EIA source vintage.
+ * Compare two truth-labelled public STEO vintages.
  *
- * Periods that remain in the later forward subset are forecast revisions. Periods
- * that have left the later forward subset but remain in the later source response
- * window are compared against that later public EIA value. Those values are
- * deliberately labelled as later-vintage public estimates, never observed actuals.
+ * `vintageDate` is deliberately source-specific: a live API snapshot uses its
+ * retrieval timestamp, while an official archive workbook uses the EIA release
+ * date. `vintageId` identifies the captured source artifact/revision and is kept
+ * separate from the paired-value revision fingerprint.
  */
-export function backtestSteoVintages(
-  baselineInput: SteoSnapshot,
-  referenceInput: SteoSnapshot,
+export function backtestSteoComparableVintages(
+  baselineInput: SteoComparableVintage,
+  referenceInput: SteoComparableVintage,
 ): SteoVintageBacktest {
-  const baseline = assertSteoSnapshot(baselineInput);
-  const reference = assertSteoSnapshot(referenceInput);
-  const baselineTime = Date.parse(baseline.retrievedAt);
-  const referenceTime = Date.parse(reference.retrievedAt);
+  const baseline = assertComparableVintage(baselineInput, 'baseline');
+  const reference = assertComparableVintage(referenceInput, 'reference');
+  const baselineTime = Date.parse(baseline.vintageDate);
+  const referenceTime = Date.parse(reference.vintageDate);
 
-  if (referenceTime <= baselineTime) {
-    throw new Error('STEO backtest reference snapshot must be later than the baseline snapshot');
-  }
-  if (reference.revisionFingerprint === baseline.revisionFingerprint) {
-    throw new Error('STEO backtest requires two distinct archived source revisions');
-  }
+  if (referenceTime <= baselineTime) throw new Error('STEO backtest reference vintage must be later than the baseline vintage');
+  if (reference.vintageId === baseline.vintageId) throw new Error('STEO backtest requires two distinct source vintages');
 
   const referenceForecastByPeriod = new Map(reference.forecast.map((point) => [point.period, point]));
   const referenceBasisByPeriod = new Map(reference.revisionBasis.map((point) => [point.period, point]));
@@ -167,18 +199,49 @@ export function backtestSteoVintages(
 
   return {
     method: 'forecast-vs-later-vintage-public-estimate',
+    baselineVintageId: baseline.vintageId,
+    referenceVintageId: reference.vintageId,
+    baselineVintageDate: baseline.vintageDate,
+    referenceVintageDate: reference.vintageDate,
     baselineFingerprint: baseline.revisionFingerprint,
     referenceFingerprint: reference.revisionFingerprint,
-    baselineRetrievedAt: baseline.retrievedAt,
-    referenceRetrievedAt: reference.retrievedAt,
     laterEstimateComparisons,
     continuingForecastComparisons,
     missingReferencePeriods,
     metrics: metrics(laterEstimateComparisons),
     limitations: [
       'Later-vintage EIA source values are public reference estimates, not observed physical flows or final actuals.',
-      'The comparison is limited to the archived vintages and periods supplied; missing reference periods are reported explicitly.',
+      'The comparison is limited to the captured vintages and periods supplied; missing reference periods are reported explicitly.',
       'Forecast revisions and later-estimate differences are descriptive and do not establish causal market drivers.',
     ],
+  };
+}
+
+export function backtestSteoVintages(
+  baselineInput: SteoSnapshot,
+  referenceInput: SteoSnapshot,
+): SteoSnapshotBacktest {
+  const baseline = assertSteoSnapshot(baselineInput);
+  const reference = assertSteoSnapshot(referenceInput);
+  const report = backtestSteoComparableVintages(
+    {
+      vintageId: `live-api:${baseline.revisionFingerprint}`,
+      vintageDate: baseline.retrievedAt,
+      revisionFingerprint: baseline.revisionFingerprint,
+      revisionBasis: baseline.revisionBasis,
+      forecast: baseline.forecast,
+    },
+    {
+      vintageId: `live-api:${reference.revisionFingerprint}`,
+      vintageDate: reference.retrievedAt,
+      revisionFingerprint: reference.revisionFingerprint,
+      revisionBasis: reference.revisionBasis,
+      forecast: reference.forecast,
+    },
+  );
+  return {
+    ...report,
+    baselineRetrievedAt: baseline.retrievedAt,
+    referenceRetrievedAt: reference.retrievedAt,
   };
 }

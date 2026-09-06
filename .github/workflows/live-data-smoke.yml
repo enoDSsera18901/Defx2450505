@@ -65,6 +65,35 @@ jobs:
             steoRevisionFingerprint: balance.revisionFingerprint,
           }, null, 2));
           NODE
+      - name: Verify committed Jan-Aug official STEO archive and backtest
+        run: |
+          npx tsx scripts/import-steo-official-vintages.ts 2026 data/steo-official-vintages > /tmp/steo-official-import.json
+          npx tsx scripts/backtest-steo-official-vintages.ts 2026-01 2026-08 data/steo-official-vintages > /tmp/steo-official-backtest.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const fail = (message) => { throw new Error(message); };
+          const imported = JSON.parse(fs.readFileSync('/tmp/steo-official-import.json', 'utf8'));
+          const backtest = JSON.parse(fs.readFileSync('/tmp/steo-official-backtest.json', 'utf8'));
+          if (!Array.isArray(imported.vintages) || imported.vintages.length !== 8) fail(`Expected eight Jan-Aug 2026 official vintages, got ${imported.vintages?.length}`);
+          if (new Set(imported.vintages.map((v) => v.sourceArtifactSha256)).size !== 8) fail('Official STEO source artifacts are not uniquely identified by SHA-256');
+          const unexpectedStatus = imported.vintages.find((v) => v.status !== 'source-artifact-already-present-and-normalization-verified');
+          if (unexpectedStatus) fail(`Committed official STEO archive no longer matches live EIA/source normalization for ${unexpectedStatus.issue}: ${unexpectedStatus.status}`);
+          if (backtest.baseline?.issue !== '2026-01' || backtest.reference?.issue !== '2026-08') fail('Official STEO backtest selected the wrong endpoint vintages');
+          if (!Array.isArray(backtest.laterEstimateComparisons) || backtest.laterEstimateComparisons.length < 1) fail('Official STEO backtest produced no matured-period comparisons');
+          if (!Array.isArray(backtest.continuingForecastComparisons) || backtest.continuingForecastComparisons.length < 1) fail('Official STEO backtest produced no continuing forecast revisions');
+          if (!backtest.metrics || backtest.metrics.comparedPeriods < 1) fail('Official STEO backtest metrics missing');
+          console.log(JSON.stringify({
+            verifiedIssues: imported.vintages.map((v) => v.issue),
+            baseline: backtest.baseline,
+            reference: backtest.reference,
+            maturedPeriods: backtest.laterEstimateComparisons.length,
+            continuingForecastPeriods: backtest.continuingForecastComparisons.length,
+            metrics: backtest.metrics,
+            evidenceBoundary: backtest.evidenceBoundary,
+          }, null, 2));
+          NODE
+      - name: Verify archive checkout stayed clean
+        run: git diff --exit-code -- data/steo-official-vintages
       - name: Verify scenario lab production route
         run: |
           curl --fail --silent --show-error http://127.0.0.1:3000/scenarios -o /tmp/scenarios.html
