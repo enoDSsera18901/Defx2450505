@@ -15,12 +15,13 @@ export type ConfidenceResult = {
 const clamp = (value: number) => Math.max(0, Math.min(100, value));
 
 /**
- * Explainable 0-100 confidence score.
+ * Explainable 0-100 confidence score for future use once every input is
+ * evidence-backed. This module does not provide source values itself.
  *
  * Positive evidence dimensions are weighted by their usefulness to a physical
  * oil-market decision. Disruption risk is inverted so high unresolved risk
- * reduces confidence. The output is intentionally deterministic and auditable;
- * it is not presented as a probability.
+ * reduces confidence. The output is deterministic and auditable; it is not a
+ * probability.
  */
 export function calculateConfidence(input: ConfidenceInputs): ConfidenceResult {
   const components = {
@@ -61,8 +62,4 @@ export function assessBalance(supplyMbpd: number, demandMbpd: number): BalanceSc
     balanceMbpd,
     state: balanceMbpd > 0.25 ? 'SURPLUS' : balanceMbpd < -0.25 ? 'DEFICIT' : 'BALANCED',
   };
-}
-
-export function landedCost(crudeUsdBbl: number, freightUsdBbl: number, feesUsdBbl = 0) {
-  return Number((crudeUsdBbl + freightUsdBbl + feesUsdBbl).toFixed(2));
 }
