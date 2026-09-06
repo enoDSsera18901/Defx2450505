@@ -42,6 +42,5 @@ export async function getEiaMarketData() {
     inventories,
     globalBalance: steoResult.data,
     globalBalanceError: steoResult.error,
-    confidenceInputs: { freshness, sourceAgreement: 72, physicalCoverage: 58, forecastStability: 68, disruptionRisk: 35 },
   };
 }
