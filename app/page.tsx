@@ -1,30 +1,35 @@
- 'use client';
+'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { calculateConfidence } from '../lib/confidence';
 
-const grades = [
-  { name: 'Brent', price: '$92.41', move: '+1.8%', tone: 'up', note: 'North Sea benchmark' },
-  { name: 'WTI', price: '$88.76', move: '+1.4%', tone: 'up', note: 'US benchmark' },
-  { name: 'Dubai', price: '$90.18', move: '+1.1%', tone: 'up', note: 'Middle East sour' },
-  { name: 'Murban', price: '$91.03', move: '+1.3%', tone: 'up', note: 'UAE light sour' },
+type Observation = {
+  period: string;
+  value: number;
+  units: string;
+};
+
+type MarketData = {
+  source: string;
+  sourceUrl: string;
+  freshness: number;
+  freshnessLabel: string;
+  prices: {
+    brent: Observation[];
+    wti: Observation[];
+  };
+  inventories: Observation[];
+};
+
+type FeedStatus = 'loading' | 'live' | 'fallback';
+
+const benchmarks = [
+  { name: 'Brent', key: 'brent' as const, note: 'North Sea benchmark' },
+  { name: 'WTI', key: 'wti' as const, note: 'US benchmark' },
+  { name: 'Dubai', key: null, note: 'Middle East sour' },
+  { name: 'Murban', key: null, note: 'UAE light sour' },
 ];
 
-const cargoes = [
-  { vessel: 'Ocean Vanguard', grade: 'Arab Light', origin: 'Ras Tanura', destination: 'Singapore', volume: '1.98m bbl', eta: '3d 8h', status: 'On time' },
-  { vessel: 'Nordic Horizon', grade: 'Basrah Medium', origin: 'Basra', destination: 'Ningbo', volume: '2.04m bbl', eta: '6d 2h', status: 'Weather risk' },
-  { vessel: 'Aegean Star', grade: 'Murban', origin: 'Fujairah', destination: 'Yeosu', volume: '1.02m bbl', eta: '4d 19h', status: 'On time' },
-  { vessel: 'Pacific Crown', grade: 'ESPO', origin: 'Kozmino', destination: 'Qingdao', volume: '0.74m bbl', eta: '2d 11h', status: 'Congestion' },
-];
-
-const drivers = [
-  { label: 'Source freshness', score: 94, detail: 'Market and vessel feeds < 30 min' },
-  { label: 'Source agreement', score: 87, detail: '5 of 6 indicators aligned' },
-  { label: 'Physical coverage', score: 78, detail: 'Key hubs covered; West Africa partial' },
-  { label: 'Forecast stability', score: 82, detail: 'Low revision volatility over 72h' },
-];
-
-const forwardSupply = [
+const forwardScenario = [
   { month: 'Sep', supply: 103.2, demand: 102.6 },
   { month: 'Oct', supply: 103.5, demand: 103.0 },
   { month: 'Nov', supply: 103.8, demand: 103.4 },
@@ -33,18 +38,64 @@ const forwardSupply = [
 ];
 
 export default function Home() {
-  const [market, setMarket] = useState<any>(null);
-  const [feedStatus, setFeedStatus] = useState<'loading' | 'live' | 'fallback'>('loading');
-  useEffect(() => { fetch('/api/market').then((r) => r.json()).then((payload) => { setFeedStatus(payload.status); setMarket(payload.data); }).catch(() => setFeedStatus('fallback')); }, []);
-  const displayGrades = useMemo(() => grades.map((g) => {
-    const series = g.name === 'Brent' ? market?.prices?.brent : g.name === 'WTI' ? market?.prices?.wti : null;
-    const latest = series?.[0];
-    const previous = series?.[1];
-    return latest ? { ...g, price: `$${latest.value.toFixed(2)}`, move: previous ? `${latest.value >= previous.value ? '+' : ''}${((latest.value / previous.value - 1) * 100).toFixed(1)}%` : '—', note: `${g.note} · EIA ${latest.period}` } : g;
-  }), [market]);
-  const confidence = market ? calculateConfidence(market.confidenceInputs) : null;
+  const [market, setMarket] = useState<MarketData | null>(null);
+  const [feedStatus, setFeedStatus] = useState<FeedStatus>('loading');
+
+  useEffect(() => {
+    fetch('/api/market')
+      .then((response) => response.json())
+      .then((payload: { status: FeedStatus; data: MarketData | null }) => {
+        setFeedStatus(payload.status);
+        setMarket(payload.data);
+      })
+      .catch(() => setFeedStatus('fallback'));
+  }, []);
+
+  const displayGrades = useMemo(
+    () =>
+      benchmarks.map((benchmark) => {
+        if (!benchmark.key || feedStatus !== 'live') {
+          return {
+            ...benchmark,
+            price: '—',
+            move: '—',
+            tone: '',
+            badge: benchmark.key ? 'UNAVAILABLE' : 'NO SOURCE',
+            sourceNote: benchmark.key ? 'EIA feed unavailable' : 'No source adapter configured',
+          };
+        }
+
+        const series = market?.prices?.[benchmark.key];
+        const latest = series?.[0];
+        const previous = series?.[1];
+
+        if (!latest) {
+          return {
+            ...benchmark,
+            price: '—',
+            move: '—',
+            tone: '',
+            badge: 'UNAVAILABLE',
+            sourceNote: 'No observation returned',
+          };
+        }
+
+        const change = previous ? (latest.value / previous.value - 1) * 100 : null;
+        return {
+          ...benchmark,
+          price: `$${latest.value.toFixed(2)}`,
+          move: change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`,
+          tone: change === null ? '' : change >= 0 ? 'up' : 'down',
+          badge: 'EIA',
+          sourceNote: `${latest.period} · ${latest.units}`,
+        };
+      }),
+    [feedStatus, market],
+  );
+
   const max = 105;
   const min = 101;
+  const feedLabel = feedStatus === 'live' ? 'EIA FEED CONNECTED' : feedStatus === 'loading' ? 'CONNECTING TO EIA' : 'EIA FEED UNAVAILABLE';
 
   return (
     <main className="shell">
@@ -53,17 +104,17 @@ export default function Home() {
           <div className="brand"><span className="brandMark">LB</span><span>LASTBARREL</span></div>
           <p className="eyebrow navLabel">INTELLIGENCE</p>
           <nav>
-            {['Overview', 'Prices', 'Supply', 'Cargoes', 'Landed Cost', 'Forecasts', 'Alerts'].map((item, i) => (
-              <a className={i === 0 ? 'navItem active' : 'navItem'} href={`#${item.toLowerCase().replace(' ', '-')}`} key={item}>
+            {['Overview', 'Prices', 'Supply', 'Cargoes', 'Landed Cost', 'Forecasts', 'Alerts'].map((item, index) => (
+              <a className={index === 0 ? 'navItem active' : 'navItem'} href={`#${item.toLowerCase().replace(' ', '-')}`} key={item}>
                 <span className="navDot" />{item}
               </a>
             ))}
           </nav>
         </div>
         <div className="sideFooter">
-          <div className="live"><span className="pulse" /> DATA FEEDS LIVE</div>
-          <p>Demo intelligence layer</p>
-          <p>UTC 11:57 · 06 SEP 2026</p>
+          <div className="live"><span className="pulse" /> {feedLabel}</div>
+          <p>Evidence-labelled intelligence layer</p>
+          <p>Physical providers: not configured</p>
         </div>
       </aside>
 
@@ -72,7 +123,7 @@ export default function Home() {
           <div>
             <p className="eyebrow">GLOBAL CRUDE INTELLIGENCE</p>
             <h1>Oil market overview</h1>
-            <p className="subtle">Price, physical availability, shipping and forward supply in one decision layer.</p>
+            <p className="subtle">Observed public data where available; physical-market values remain unavailable until source-backed.</p>
           </div>
           <div className="topActions">
             <button className="ghost">Export brief</button>
@@ -81,18 +132,31 @@ export default function Home() {
         </header>
 
         <section className="card" style={{ marginBottom: 18 }}>
-          <div className="sectionHead"><div><p className="eyebrow">DATA PROVENANCE</p><h2>{feedStatus === 'live' ? 'EIA public feed connected' : feedStatus === 'loading' ? 'Connecting to EIA…' : 'EIA feed unavailable — demo values retained'}</h2></div><span className={`status ${feedStatus === 'live' ? 'good' : ''}`}>{feedStatus.toUpperCase()}</span></div>
-          <p className="subtle">{market ? `${market.source} · ${market.freshnessLabel} · confidence freshness input ${market.freshness}/100` : 'The dashboard will show the last demo snapshot until the public feed responds.'} <a href="https://www.eia.gov/opendata/" target="_blank" rel="noreferrer">View source ↗</a></p>
-          {confidence && <div className="availability"><span>Data-derived confidence</span><strong>{confidence.score}/100 · {confidence.band}</strong><small>Freshness, source quality, physical coverage and risk inputs are now calculated from the feed adapter; shipping and forward outlook remain mocked.</small></div>}
+          <div className="sectionHead">
+            <div>
+              <p className="eyebrow">DATA PROVENANCE</p>
+              <h2>{feedStatus === 'live' ? 'EIA public feed connected' : feedStatus === 'loading' ? 'Connecting to EIA…' : 'EIA public feed unavailable'}</h2>
+            </div>
+            <span className={`status ${feedStatus === 'live' ? 'good' : ''}`}>{feedStatus.toUpperCase()}</span>
+          </div>
+          <p className="subtle">
+            {market ? `${market.source} · ${market.freshnessLabel}` : 'No live EIA values are being displayed until the feed responds.'}{' '}
+            <a href="https://www.eia.gov/opendata/" target="_blank" rel="noreferrer">View source ↗</a>
+          </p>
+          <div className="availability">
+            <span>Physical-market coverage</span>
+            <strong>Unavailable</strong>
+            <small>No cargo, route, freight or grade-price provider is configured. The application will not substitute demonstration values.</small>
+          </div>
         </section>
 
         <section className="metricGrid" id="prices">
-          {displayGrades.map((g) => (
-            <article className="card metric" key={g.name}>
-              <div className="metricHead"><span>{g.name}</span><span className="badge">LIVE</span></div>
-              <div className="priceRow"><strong>{g.price}</strong><span className={g.tone}>{g.move}</span></div>
-              <p>{g.note} · USD/bbl</p>
-              <div className="spark">▁▂▂▃▄▃▅▆▅▇</div>
+          {displayGrades.map((grade) => (
+            <article className="card metric" key={grade.name}>
+              <div className="metricHead"><span>{grade.name}</span><span className="badge">{grade.badge}</span></div>
+              <div className="priceRow"><strong>{grade.price}</strong><span className={grade.tone}>{grade.move}</span></div>
+              <p>{grade.note} · {grade.sourceNote}</p>
+              <div className="spark">{grade.badge === 'EIA' ? '▁▂▂▃▄▃▅▆▅▇' : '──────────'}</div>
             </article>
           ))}
         </section>
@@ -100,22 +164,27 @@ export default function Home() {
         <section className="twoCol">
           <article className="card confidenceCard">
             <div className="sectionHead">
-              <div><p className="eyebrow">DECISION SIGNAL</p><h2>Supply confidence</h2></div>
-              <span className="status good">HIGH</span>
+              <div><p className="eyebrow">DECISION SIGNAL</p><h2>Physical supply assessment</h2></div>
+              <span className="status">UNAVAILABLE</span>
             </div>
             <div className="confidenceHero">
-              <div className="scoreRing"><span>86</span><small>/100</small></div>
+              <div className="scoreRing"><span>—</span><small>/100</small></div>
               <div>
-                <h3>Market likely remains adequately supplied</h3>
-                <p>Current physical flows and announced additions outweigh near-term disruption risk. Confidence is reduced by incomplete West African cargo visibility and weather exposure in the Gulf.</p>
+                <h3>No defensible physical-market confidence score yet</h3>
+                <p>A supply conclusion requires real production, loading-program, cargo, route and disruption evidence. Those provider inputs are not configured, so LastBarrel does not manufacture a HIGH/MEDIUM/LOW call.</p>
               </div>
             </div>
             <div className="drivers">
-              {drivers.map((d) => (
-                <div className="driver" key={d.label}>
-                  <div className="driverTop"><span>{d.label}</span><strong>{d.score}</strong></div>
-                  <div className="track"><span style={{ width: `${d.score}%` }} /></div>
-                  <small>{d.detail}</small>
+              {[
+                ['Source freshness', 'EIA price/inventory feed only'],
+                ['Source agreement', 'Insufficient independent physical sources'],
+                ['Physical coverage', 'Cargo and loading-program providers absent'],
+                ['Forecast stability', 'Awaiting source-backed forecast adapter'],
+              ].map(([label, detail]) => (
+                <div className="driver" key={label}>
+                  <div className="driverTop"><span>{label}</span><strong>—</strong></div>
+                  <div className="track"><span style={{ width: '0%' }} /></div>
+                  <small>{detail}</small>
                 </div>
               ))}
             </div>
@@ -123,97 +192,97 @@ export default function Home() {
 
           <article className="card" id="supply">
             <div className="sectionHead">
-              <div><p className="eyebrow">PHYSICAL BALANCE</p><h2>Current supply</h2></div>
-              <span className="status">+0.6m b/d</span>
+              <div><p className="eyebrow">PHYSICAL BALANCE</p><h2>Current global supply</h2></div>
+              <span className="status">UNAVAILABLE</span>
             </div>
-            <div className="bigNumber">103.2 <span>m b/d</span></div>
-            <p className="subtle">Estimated global liquids supply versus 102.6m b/d current demand.</p>
-            <div className="supplyRows">
-              <div><span>OPEC+</span><strong>43.1</strong><small>m b/d</small></div>
-              <div><span>United States</span><strong>20.4</strong><small>m b/d</small></div>
-              <div><span>Other non-OPEC</span><strong>39.7</strong><small>m b/d</small></div>
+            <div className="bigNumber">— <span>m b/d</span></div>
+            <p className="subtle">No current global supply/demand adapter is connected. A future EIA STEO or equivalent public-source adapter can populate this surface with publication and retrieval metadata.</p>
+            <div className="availability">
+              <span>Prompt availability</span>
+              <strong>Unknown</strong>
+              <small>No loading-program or cargo provider is configured.</small>
             </div>
-            <div className="availability"><span>Prompt availability</span><strong>Normal</strong><small>48 tracked loading programs · 7 constrained</small></div>
           </article>
         </section>
 
         <section className="card chartCard" id="forecasts">
           <div className="sectionHead">
-            <div><p className="eyebrow">FORWARD BALANCE</p><h2>Supply vs demand outlook</h2></div>
+            <div><p className="eyebrow">SCENARIO ONLY</p><h2>Illustrative supply vs demand balance</h2></div>
             <div className="legend"><span><i className="supplyKey" />Supply</span><span><i className="demandKey" />Demand</span></div>
           </div>
           <div className="forecastChart">
-            {forwardSupply.map((x) => {
-              const sh = ((x.supply - min) / (max - min)) * 100;
-              const dh = ((x.demand - min) / (max - min)) * 100;
+            {forwardScenario.map((point) => {
+              const supplyHeight = ((point.supply - min) / (max - min)) * 100;
+              const demandHeight = ((point.demand - min) / (max - min)) * 100;
               return (
-                <div className="month" key={x.month}>
+                <div className="month" key={point.month}>
                   <div className="bars">
-                    <span className="bar supplyBar" style={{ height: `${sh}%` }} title={`Supply ${x.supply}`} />
-                    <span className="bar demandBar" style={{ height: `${dh}%` }} title={`Demand ${x.demand}`} />
+                    <span className="bar supplyBar" style={{ height: `${supplyHeight}%` }} title={`Scenario supply ${point.supply}`} />
+                    <span className="bar demandBar" style={{ height: `${demandHeight}%` }} title={`Scenario demand ${point.demand}`} />
                   </div>
-                  <strong>{x.month}</strong>
-                  <small>+{(x.supply - x.demand).toFixed(1)}</small>
+                  <strong>{point.month}</strong>
+                  <small>+{(point.supply - point.demand).toFixed(1)}</small>
                 </div>
               );
             })}
           </div>
-          <div className="forecastCallout"><strong>Illustrative scenario:</strong> forward balance is still mocked pending an EIA/STEO forecast adapter. <span>Not live.</span></div>
+          <div className="forecastCallout"><strong>Scenario:</strong> these values exist only to exercise the chart and are not observations or forecasts. <span>Not live.</span></div>
         </section>
 
         <section className="card chartCard">
-          <div className="sectionHead"><div><p className="eyebrow">EIA HISTORY</p><h2>U.S. crude inventories</h2></div><span className="status">Weekly · excluding SPR</span></div>
-          {market?.inventories?.length ? <div className="forecastChart">
-            {market.inventories.slice(0, 8).reverse().map((x: { period: string; value: number }) => <div className="month" key={x.period}><div className="bars"><span className="bar supplyBar" style={{ height: `${Math.max(8, (x.value / Math.max(...market.inventories.map((i: { value: number }) => i.value))) * 100)}%` }} /></div><strong>{x.period.slice(5)}</strong><small>{(x.value / 1000).toFixed(0)}m</small></div>)}
-          </div> : <p className="subtle">Waiting for the live EIA inventory series.</p>}
-          <div className="forecastCallout"><strong>Live series:</strong> EIA WCESTUS1, ending stocks excluding the Strategic Petroleum Reserve. Price history uses RBRTE and RWTC monthly spot series.</div>
+          <div className="sectionHead">
+            <div><p className="eyebrow">EIA HISTORY</p><h2>U.S. crude inventories</h2></div>
+            <span className="status">Weekly · excluding SPR</span>
+          </div>
+          {market?.inventories?.length ? (
+            <div className="forecastChart">
+              {market.inventories.slice(0, 8).reverse().map((observation) => {
+                const maximum = Math.max(...market.inventories.map((item) => item.value));
+                return (
+                  <div className="month" key={observation.period}>
+                    <div className="bars"><span className="bar supplyBar" style={{ height: `${Math.max(8, (observation.value / maximum) * 100)}%` }} /></div>
+                    <strong>{observation.period.slice(5)}</strong>
+                    <small>{(observation.value / 1000).toFixed(0)}m</small>
+                  </div>
+                );
+              })}
+            </div>
+          ) : <p className="subtle">No inventory observations are displayed while the EIA feed is unavailable.</p>}
+          <div className="forecastCallout"><strong>Observed series:</strong> EIA WCESTUS1, ending stocks excluding the Strategic Petroleum Reserve. Price history uses RBRTE and RWTC monthly spot series.</div>
         </section>
 
         <section className="twoCol lower">
           <article className="card" id="cargoes">
-            <div className="sectionHead"><div><p className="eyebrow">MARITIME FLOWS</p><h2>Cargoes en route</h2></div><span className="status">5.78m bbl shown</span></div>
-            <div className="tableWrap">
-              <table>
-                <thead><tr><th>Vessel / Grade</th><th>Route</th><th>Volume</th><th>ETA</th><th>Status</th></tr></thead>
-                <tbody>
-                  {cargoes.map((c) => (
-                    <tr key={c.vessel}>
-                      <td><strong>{c.vessel}</strong><small>{c.grade}</small></td>
-                      <td>{c.origin} → {c.destination}</td>
-                      <td>{c.volume}</td><td>{c.eta}</td>
-                      <td><span className={c.status === 'On time' ? 'mini goodMini' : 'mini warnMini'}>{c.status}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="sectionHead"><div><p className="eyebrow">MARITIME FLOWS</p><h2>Cargoes en route</h2></div><span className="status">UNAVAILABLE</span></div>
+            <div className="availability">
+              <span>No cargo provider configured</span>
+              <strong>0 source-backed cargoes</strong>
+              <small>AIS position alone will not be treated as proof of cargo grade, volume or destination. This table will populate only from validated cargo evidence.</small>
             </div>
           </article>
 
           <article className="card" id="landed-cost">
-            <div className="sectionHead"><div><p className="eyebrow">DELIVERED ECONOMICS</p><h2>Landed cost — Singapore</h2></div><span className="status">VLCC</span></div>
-            <div className="costRows">
-              <div><span>Arab Light · Ras Tanura</span><strong>$94.86</strong><small>+ $2.45 freight</small></div>
-              <div><span>Murban · Fujairah</span><strong>$94.21</strong><small>+ $3.18 freight</small></div>
-              <div><span>Basrah Medium · Basra</span><strong>$92.74</strong><small>+ $3.04 freight</small></div>
-              <div><span>ESPO · Kozmino</span><strong>$95.08</strong><small>+ $4.17 freight</small></div>
+            <div className="sectionHead"><div><p className="eyebrow">DELIVERED ECONOMICS</p><h2>Landed cost</h2></div><span className="status">UNAVAILABLE</span></div>
+            <div className="availability">
+              <span>No defensible comparison yet</span>
+              <strong>Awaiting component evidence</strong>
+              <small>Crude price or grade differential, freight and applicable fees must each be source-backed before a delivered-cost total or “best value” recommendation is shown.</small>
             </div>
-            <div className="recommendation"><p className="eyebrow">BEST DELIVERED VALUE</p><strong>Basrah Medium</strong><span>$1.47/bbl below next-best adjusted option</span></div>
           </article>
         </section>
 
         <section className="card methodology">
-          <div><p className="eyebrow">CONFIDENCE ENGINE</p><h2>How the assessment works</h2></div>
+          <div><p className="eyebrow">EVIDENCE STANDARD</p><h2>How the assessment will work</h2></div>
           <div className="methodGrid">
-            <div><strong>1. Evidence</strong><p>Price feeds, production estimates, inventories, refinery runs, loading programs, vessel movement and announced capacity.</p></div>
+            <div><strong>1. Evidence</strong><p>Identify every value as observed, estimated, forecast, scenario or unavailable and retain its source.</p></div>
             <div><strong>2. Agreement</strong><p>Cross-check independent sources and penalise stale, missing or contradictory observations.</p></div>
-            <div><strong>3. Forecast risk</strong><p>Score disruption exposure, schedule certainty, historical revision error and scenario dispersion.</p></div>
-            <div><strong>4. Explainability</strong><p>Every confidence score exposes its drivers, data gaps and key assumptions rather than presenting unsupported certainty.</p></div>
+            <div><strong>3. Forecast risk</strong><p>Separate actual observations from model output and expose assumptions and revision risk.</p></div>
+            <div><strong>4. Explainability</strong><p>Only derive confidence from real freshness, coverage and agreement inputs; never from decorative constants.</p></div>
           </div>
         </section>
 
-        <footer>LASTBARREL · EIA PRICES + INVENTORIES LIVE · CARGOES, LANDED COST AND FORWARD OUTLOOK DEMONSTRATION DATA</footer>
+        <footer>LASTBARREL · EIA BRENT/WTI + U.S. INVENTORIES WHEN AVAILABLE · PHYSICAL OIL DATA REMAINS UNAVAILABLE UNTIL SOURCE-BACKED</footer>
       </section>
     </main>
   );
 }
-
