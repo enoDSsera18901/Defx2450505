@@ -8,6 +8,17 @@ type Observation = {
   units: string;
 };
 
+type SteoWorldBalance = {
+  status: 'available' | 'unavailable';
+  source: string;
+  sourceUrl: string;
+  retrievedAt: string;
+  evidence: 'forecast';
+  production: Observation[];
+  consumption: Observation[];
+  reason?: string;
+};
+
 type MarketData = {
   source: string;
   sourceUrl: string;
@@ -18,6 +29,7 @@ type MarketData = {
     wti: Observation[];
   };
   inventories: Observation[];
+  steo: SteoWorldBalance;
 };
 
 type FeedStatus = 'loading' | 'live' | 'fallback';
@@ -27,14 +39,6 @@ const benchmarks = [
   { name: 'WTI', key: 'wti' as const, note: 'US benchmark' },
   { name: 'Dubai', key: null, note: 'Middle East sour' },
   { name: 'Murban', key: null, note: 'UAE light sour' },
-];
-
-const forwardScenario = [
-  { month: 'Sep', supply: 103.2, demand: 102.6 },
-  { month: 'Oct', supply: 103.5, demand: 103.0 },
-  { month: 'Nov', supply: 103.8, demand: 103.4 },
-  { month: 'Dec', supply: 104.4, demand: 103.7 },
-  { month: 'Jan', supply: 104.8, demand: 104.0 },
 ];
 
 export default function Home() {
@@ -93,9 +97,32 @@ export default function Home() {
     [feedStatus, market],
   );
 
-  const max = 105;
-  const min = 101;
+  const steoPoints = useMemo(() => {
+    if (market?.steo?.status !== 'available') return [];
+    return market.steo.production
+      .map((production) => {
+        const consumption = market.steo.consumption.find((row) => row.period === production.period);
+        if (!consumption) return null;
+        return {
+          period: production.period,
+          supply: production.value,
+          demand: consumption.value,
+          balance: production.value - consumption.value,
+          units: production.units || consumption.units || 'million barrels per day',
+        };
+      })
+      .filter((point): point is NonNullable<typeof point> => point !== null)
+      .sort((a, b) => a.period.localeCompare(b.period));
+  }, [market]);
+
+  const currentYear = String(new Date().getUTCFullYear());
+  const currentSteo = steoPoints.find((point) => point.period === currentYear) ?? steoPoints.at(-1);
+  const chartValues = steoPoints.flatMap((point) => [point.supply, point.demand]);
+  const chartMin = chartValues.length ? Math.floor(Math.min(...chartValues) - 1) : 0;
+  const chartMax = chartValues.length ? Math.ceil(Math.max(...chartValues) + 1) : 1;
+  const chartRange = Math.max(1, chartMax - chartMin);
   const feedLabel = feedStatus === 'live' ? 'EIA FEED CONNECTED' : feedStatus === 'loading' ? 'CONNECTING TO EIA' : 'EIA FEED UNAVAILABLE';
+  const steoAvailable = market?.steo?.status === 'available' && steoPoints.length > 0;
 
   return (
     <main className="shell">
@@ -114,7 +141,7 @@ export default function Home() {
         <div className="sideFooter">
           <div className="live"><span className="pulse" /> {feedLabel}</div>
           <p>Evidence-labelled intelligence layer</p>
-          <p>Physical providers: not configured</p>
+          <p>Cargo / freight providers: not configured</p>
         </div>
       </aside>
 
@@ -123,7 +150,7 @@ export default function Home() {
           <div>
             <p className="eyebrow">GLOBAL CRUDE INTELLIGENCE</p>
             <h1>Oil market overview</h1>
-            <p className="subtle">Observed public data where available; physical-market values remain unavailable until source-backed.</p>
+            <p className="subtle">Observed public data and source-labelled forecasts where available; unsupported physical values remain unavailable.</p>
           </div>
           <div className="topActions">
             <button className="ghost">Export brief</button>
@@ -145,8 +172,8 @@ export default function Home() {
           </p>
           <div className="availability">
             <span>Physical-market coverage</span>
-            <strong>Unavailable</strong>
-            <small>No cargo, route, freight or grade-price provider is configured. The application will not substitute demonstration values.</small>
+            <strong>{steoAvailable ? 'Partial' : 'Unavailable'}</strong>
+            <small>{steoAvailable ? 'Global annual supply/demand outlook is sourced from EIA STEO. Cargo, route, freight and grade-price providers remain unavailable.' : 'No cargo, route, freight, grade-price or global-balance provider is currently responding. Demonstration values are not substituted.'}</small>
           </div>
         </section>
 
@@ -171,18 +198,18 @@ export default function Home() {
               <div className="scoreRing"><span>—</span><small>/100</small></div>
               <div>
                 <h3>No defensible physical-market confidence score yet</h3>
-                <p>A supply conclusion requires real production, loading-program, cargo, route and disruption evidence. Those provider inputs are not configured, so LastBarrel does not manufacture a HIGH/MEDIUM/LOW call.</p>
+                <p>STEO improves the macro balance view, but a physical confidence call still requires real loading-program, cargo, route and disruption evidence. LastBarrel does not convert a forecast into a fake physical-coverage score.</p>
               </div>
             </div>
             <div className="drivers">
               {[
-                ['Source freshness', 'EIA price/inventory feed only'],
-                ['Source agreement', 'Insufficient independent physical sources'],
+                ['Public market data', feedStatus === 'live' ? 'EIA prices and inventories connected' : 'EIA public feed unavailable'],
+                ['Macro outlook', steoAvailable ? 'EIA STEO world balance connected' : 'STEO world balance unavailable'],
                 ['Physical coverage', 'Cargo and loading-program providers absent'],
-                ['Forecast stability', 'Awaiting source-backed forecast adapter'],
+                ['Route economics', 'Freight and landed-cost evidence absent'],
               ].map(([label, detail]) => (
                 <div className="driver" key={label}>
-                  <div className="driverTop"><span>{label}</span><strong>—</strong></div>
+                  <div className="driverTop"><span>{label}</span><strong>{label === 'Public market data' && feedStatus === 'live' || label === 'Macro outlook' && steoAvailable ? '✓' : '—'}</strong></div>
                   <div className="track"><span style={{ width: '0%' }} /></div>
                   <small>{detail}</small>
                 </div>
@@ -192,41 +219,52 @@ export default function Home() {
 
           <article className="card" id="supply">
             <div className="sectionHead">
-              <div><p className="eyebrow">PHYSICAL BALANCE</p><h2>Current global supply</h2></div>
-              <span className="status">UNAVAILABLE</span>
+              <div><p className="eyebrow">MACRO BALANCE</p><h2>EIA STEO global liquids outlook</h2></div>
+              <span className={`status ${steoAvailable ? 'good' : ''}`}>{steoAvailable ? 'FORECAST' : 'UNAVAILABLE'}</span>
             </div>
-            <div className="bigNumber">— <span>m b/d</span></div>
-            <p className="subtle">No current global supply/demand adapter is connected. A future EIA STEO or equivalent public-source adapter can populate this surface with publication and retrieval metadata.</p>
-            <div className="availability">
-              <span>Prompt availability</span>
-              <strong>Unknown</strong>
-              <small>No loading-program or cargo provider is configured.</small>
-            </div>
+            {currentSteo ? (
+              <>
+                <div className="bigNumber">{currentSteo.supply.toFixed(2)} <span>m b/d</span></div>
+                <p className="subtle">{currentSteo.period} world petroleum and other liquid fuels production; STEO consumption {currentSteo.demand.toFixed(2)}m b/d.</p>
+                <div className="availability">
+                  <span>Implied annual balance</span>
+                  <strong>{currentSteo.balance >= 0 ? '+' : ''}{currentSteo.balance.toFixed(2)}m b/d</strong>
+                  <small>Forecast/model balance, not observed prompt availability. Series: PAPR_WORLD vs PATC_WORLD.</small>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bigNumber">— <span>m b/d</span></div>
+                <p className="subtle">The optional EIA STEO adapter is unavailable. The core Brent/WTI and U.S. inventory path remains independent.</p>
+              </>
+            )}
           </article>
         </section>
 
         <section className="card chartCard" id="forecasts">
           <div className="sectionHead">
-            <div><p className="eyebrow">SCENARIO ONLY</p><h2>Illustrative supply vs demand balance</h2></div>
-            <div className="legend"><span><i className="supplyKey" />Supply</span><span><i className="demandKey" />Demand</span></div>
+            <div><p className="eyebrow">SOURCE-BACKED OUTLOOK</p><h2>STEO world liquids production vs consumption</h2></div>
+            <div className="legend"><span><i className="supplyKey" />Production</span><span><i className="demandKey" />Consumption</span></div>
           </div>
-          <div className="forecastChart">
-            {forwardScenario.map((point) => {
-              const supplyHeight = ((point.supply - min) / (max - min)) * 100;
-              const demandHeight = ((point.demand - min) / (max - min)) * 100;
-              return (
-                <div className="month" key={point.month}>
-                  <div className="bars">
-                    <span className="bar supplyBar" style={{ height: `${supplyHeight}%` }} title={`Scenario supply ${point.supply}`} />
-                    <span className="bar demandBar" style={{ height: `${demandHeight}%` }} title={`Scenario demand ${point.demand}`} />
+          {steoPoints.length ? (
+            <div className="forecastChart">
+              {steoPoints.map((point) => {
+                const supplyHeight = ((point.supply - chartMin) / chartRange) * 100;
+                const demandHeight = ((point.demand - chartMin) / chartRange) * 100;
+                return (
+                  <div className="month" key={point.period}>
+                    <div className="bars">
+                      <span className="bar supplyBar" style={{ height: `${Math.max(8, supplyHeight)}%` }} title={`STEO production ${point.supply}`} />
+                      <span className="bar demandBar" style={{ height: `${Math.max(8, demandHeight)}%` }} title={`STEO consumption ${point.demand}`} />
+                    </div>
+                    <strong>{point.period}</strong>
+                    <small>{point.balance >= 0 ? '+' : ''}{point.balance.toFixed(1)}</small>
                   </div>
-                  <strong>{point.month}</strong>
-                  <small>+{(point.supply - point.demand).toFixed(1)}</small>
-                </div>
-              );
-            })}
-          </div>
-          <div className="forecastCallout"><strong>Scenario:</strong> these values exist only to exercise the chart and are not observations or forecasts. <span>Not live.</span></div>
+                );
+              })}
+            </div>
+          ) : <p className="subtle">No STEO world-balance series is currently available.</p>}
+          <div className="forecastCallout"><strong>Evidence class: forecast.</strong> EIA STEO series PAPR_WORLD and PATC_WORLD are revised with each outlook release. They are not displayed as live vessel-level supply. {market?.steo?.status === 'available' && <a href={market.steo.sourceUrl} target="_blank" rel="noreferrer">View STEO ↗</a>}</div>
         </section>
 
         <section className="card chartCard">
@@ -272,16 +310,16 @@ export default function Home() {
         </section>
 
         <section className="card methodology">
-          <div><p className="eyebrow">EVIDENCE STANDARD</p><h2>How the assessment will work</h2></div>
+          <div><p className="eyebrow">EVIDENCE STANDARD</p><h2>How the assessment works</h2></div>
           <div className="methodGrid">
             <div><strong>1. Evidence</strong><p>Identify every value as observed, estimated, forecast, scenario or unavailable and retain its source.</p></div>
             <div><strong>2. Agreement</strong><p>Cross-check independent sources and penalise stale, missing or contradictory observations.</p></div>
-            <div><strong>3. Forecast risk</strong><p>Separate actual observations from model output and expose assumptions and revision risk.</p></div>
+            <div><strong>3. Forecast risk</strong><p>Separate actual observations from STEO/model output and expose assumptions and revision risk.</p></div>
             <div><strong>4. Explainability</strong><p>Only derive confidence from real freshness, coverage and agreement inputs; never from decorative constants.</p></div>
           </div>
         </section>
 
-        <footer>LASTBARREL · EIA BRENT/WTI + U.S. INVENTORIES WHEN AVAILABLE · PHYSICAL OIL DATA REMAINS UNAVAILABLE UNTIL SOURCE-BACKED</footer>
+        <footer>LASTBARREL · EIA BRENT/WTI + U.S. INVENTORIES · EIA STEO GLOBAL BALANCE FORECAST · CARGO/FREIGHT DATA UNAVAILABLE UNTIL SOURCE-BACKED</footer>
       </section>
     </main>
   );
