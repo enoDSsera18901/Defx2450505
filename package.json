@@ -14,7 +14,9 @@
     "test:scenario": "tsx --test tests/landed-scenario.test.ts",
     "test:steo-revision": "tsx --test tests/steo-revision.test.ts",
     "test:steo-archive": "tsx --test tests/steo-snapshot-store.test.ts",
+    "test:steo-backtest": "tsx --test tests/steo-backtest.test.ts",
     "steo:capture": "tsx scripts/capture-steo-snapshot.ts",
+    "steo:backtest": "tsx scripts/backtest-steo-snapshots.ts",
     "trial:report": "tsx scripts/provider-trial-report.ts"
   },
   "dependencies": {

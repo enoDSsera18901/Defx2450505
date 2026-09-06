@@ -85,6 +85,14 @@ test('rejects a snapshot whose fingerprint does not match its revision basis', (
   assert.ok(validateSteoSnapshot(snapshot).some((error) => error.includes('does not match revisionBasis contents')));
 });
 
+test('rejects a mathematically inconsistent derived balance even when its fingerprint is internally consistent', () => {
+  const snapshot = makeSnapshot('2026-09-07T01:00:00Z');
+  snapshot.revisionBasis[0].balanceMbpd = 9;
+  snapshot.revisionFingerprint = fingerprintSteoForecast(snapshot.revisionBasis);
+
+  assert.ok(validateSteoSnapshot(snapshot).some((error) => error.includes('balanceMbpd must equal supplyMbpd minus demandMbpd')));
+});
+
 test('rejects a forecast value that is not present identically in the archived revision basis', () => {
   const snapshot = makeSnapshot('2026-09-07T01:00:00Z');
   snapshot.forecast[0].supplyMbpd += 1;
