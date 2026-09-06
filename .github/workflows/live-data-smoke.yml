@@ -1,0 +1,68 @@
+name: Live EIA smoke
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Start production server
+        run: |
+          npm run start > /tmp/lastbarrel.log 2>&1 &
+          echo $! > /tmp/lastbarrel.pid
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/api/market -o /tmp/market.json; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/lastbarrel.log
+          exit 1
+      - name: Verify live EIA and STEO payload
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync('/tmp/market.json', 'utf8'));
+          const fail = (message) => { throw new Error(message); };
+          if (payload.status !== 'live') fail(`Expected live core EIA status, got ${payload.status}`);
+          const data = payload.data;
+          if (!Array.isArray(data?.prices?.brent) || data.prices.brent.length < 2) fail('Brent EIA series missing');
+          if (!Array.isArray(data?.prices?.wti) || data.prices.wti.length < 2) fail('WTI EIA series missing');
+          if (!Array.isArray(data?.inventories) || data.inventories.length < 2) fail('EIA inventory series missing');
+          const balance = data?.globalBalance;
+          if (!balance) fail(`STEO balance missing: ${data?.globalBalanceError ?? 'unknown error'}`);
+          if (balance?.seriesIds?.supply !== 'PAPR_WORLD') fail('Unexpected STEO supply series');
+          if (balance?.seriesIds?.demand !== 'PATC_WORLD') fail('Unexpected STEO demand series');
+          if (!Array.isArray(balance?.forecast) || balance.forecast.length < 2) fail('Paired STEO forecast periods missing');
+          for (const point of balance.forecast.slice(0, 2)) {
+            if (point.classification !== 'forecast') fail('STEO point not labelled forecast');
+            if (!Number.isFinite(point.supplyMbpd) || !Number.isFinite(point.demandMbpd) || !Number.isFinite(point.balanceMbpd)) fail('Invalid STEO numeric point');
+          }
+          console.log(JSON.stringify({
+            coreStatus: payload.status,
+            brentLatest: data.prices.brent[0].period,
+            inventoryLatest: data.inventories[0].period,
+            steoFirstForecast: balance.forecast[0],
+            steoSeries: balance.seriesIds,
+          }, null, 2));
+          NODE
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/lastbarrel.log || true
