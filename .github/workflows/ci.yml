@@ -19,6 +19,19 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Download official EIA STEO vintage samples
+        run: |
+          mkdir -p /tmp/steo-vintages
+          curl --fail --location --retry 3 https://www.eia.gov/outlooks/steo/archives/jan26_base.xlsx -o /tmp/steo-vintages/jan26_base.xlsx
+          curl --fail --location --retry 3 https://www.eia.gov/outlooks/steo/archives/jul26_base.xlsx -o /tmp/steo-vintages/jul26_base.xlsx
+          curl --fail --location --retry 3 https://www.eia.gov/outlooks/steo/archives/aug26_base.xlsx -o /tmp/steo-vintages/aug26_base.xlsx
+      - name: Preserve official STEO vintage samples for format inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: steo-official-vintage-samples
+          path: /tmp/steo-vintages/*.xlsx
+          if-no-files-found: error
+          retention-days: 1
       - name: Physical-data contract tests
         run: npm run test:physical
       - name: Provider-adapter contract tests
