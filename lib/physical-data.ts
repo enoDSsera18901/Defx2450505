@@ -60,10 +60,13 @@ export const CARGO_STATES = [
 ] as const;
 export type CargoState = (typeof CARGO_STATES)[number];
 
+export const CARGO_QUANTITY_UNITS = ['bbl', 'mt', 'm3'] as const;
+export const CARGO_QUANTITY_BASES = ['reported', 'provider_estimated', 'derived'] as const;
+
 export type CargoQuantity = {
   amount: number;
-  unit: 'bbl' | 'mt' | 'm3';
-  basis: 'reported' | 'provider_estimated' | 'derived';
+  unit: (typeof CARGO_QUANTITY_UNITS)[number];
+  basis: (typeof CARGO_QUANTITY_BASES)[number];
 };
 
 export type CargoObservation = {
@@ -81,16 +84,20 @@ export type CargoObservation = {
   provenance: Provenance;
 };
 
+export const PORT_EVENT_TYPES = ['arrival', 'departure', 'load', 'discharge', 'ship_to_ship'] as const;
+
 export type PortEvent = {
   kind: 'port_event';
   eventId: string;
   vesselId: string;
   cargoId?: string | null;
-  eventType: 'arrival' | 'departure' | 'load' | 'discharge' | 'ship_to_ship';
+  eventType: (typeof PORT_EVENT_TYPES)[number];
   port: EvidenceValue<string>;
   eventTime: EvidenceValue<string>;
   provenance: Provenance;
 };
+
+export const ROUTE_STATES = ['underway', 'anchored', 'waiting', 'diverted', 'unknown'] as const;
 
 export type RouteEstimate = {
   kind: 'route';
@@ -100,14 +107,16 @@ export type RouteEstimate = {
   origin?: EvidenceValue<string> | null;
   destination?: EvidenceValue<string> | null;
   eta?: EvidenceValue<{ timestamp: string; uncertaintyHours?: number | null }> | null;
-  routeState?: EvidenceValue<'underway' | 'anchored' | 'waiting' | 'diverted' | 'unknown'> | null;
+  routeState?: EvidenceValue<(typeof ROUTE_STATES)[number]> | null;
   provenance: Provenance;
 };
 
+export const FREIGHT_UNITS = ['usd_per_bbl', 'usd_per_mt', 'worldscale', 'lumpsum'] as const;
+
 export type FreightRate = {
   amount: number;
-  currency: string;
-  unit: 'usd_per_bbl' | 'usd_per_mt' | 'worldscale' | 'lumpsum';
+  currency?: string | null;
+  unit: (typeof FREIGHT_UNITS)[number];
 };
 
 export type FreightObservation = {
@@ -127,13 +136,21 @@ export type PhysicalObservation =
   | RouteEstimate
   | FreightObservation;
 
+const EVIDENCE_CLASSES = ['observed', 'derived', 'estimated', 'forecast', 'scenario', 'unavailable'] as const;
+const VALUE_EVIDENCE_CLASSES = ['observed', 'derived', 'estimated', 'forecast', 'scenario'] as const;
+const PHYSICAL_KINDS = ['vessel', 'cargo', 'port_event', 'route', 'freight'] as const;
+
 const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const validIso = (value: unknown): value is string => nonEmpty(value) && !Number.isNaN(Date.parse(value));
 const validConfidence = (value: unknown) => value == null || (finite(value) && value >= 0 && value <= 1);
+const oneOf = (value: unknown, allowed: readonly string[]) => typeof value === 'string' && allowed.includes(value);
 
 function validateEvidenceValue<T>(label: string, item: EvidenceValue<T> | null | undefined, errors: string[]) {
   if (item == null) return;
+  if (!oneOf(item.evidenceClass, VALUE_EVIDENCE_CLASSES)) {
+    errors.push(`${label}.evidenceClass is invalid`);
+  }
   if (!Array.isArray(item.sourceRecordIds) || item.sourceRecordIds.length === 0 || item.sourceRecordIds.some((id) => !nonEmpty(id))) {
     errors.push(`${label}.sourceRecordIds must contain at least one stable source record ID`);
   }
@@ -158,7 +175,7 @@ export function validateProvenance(provenance: Provenance): string[] {
   if (provenance.observedAt != null && !validIso(provenance.observedAt)) errors.push('provenance.observedAt must be an ISO-compatible timestamp');
   if (provenance.effectiveAt != null && !validIso(provenance.effectiveAt)) errors.push('provenance.effectiveAt must be an ISO-compatible timestamp');
   if (!validConfidence(provenance.confidence)) errors.push('provenance.confidence must be between 0 and 1');
-  if (!['observed', 'derived', 'estimated', 'forecast', 'scenario', 'unavailable'].includes(provenance.evidenceClass)) {
+  if (!oneOf(provenance.evidenceClass, EVIDENCE_CLASSES)) {
     errors.push('provenance.evidenceClass is invalid');
   }
   if (['derived', 'estimated', 'forecast', 'scenario'].includes(provenance.evidenceClass) && !nonEmpty(provenance.methodId)) {
@@ -169,6 +186,11 @@ export function validateProvenance(provenance: Provenance): string[] {
 
 export function validatePhysicalObservation(record: PhysicalObservation): string[] {
   const errors = validateProvenance(record.provenance);
+
+  if (!oneOf(record.kind, PHYSICAL_KINDS)) {
+    errors.push('kind is not a supported physical observation type');
+    return errors;
+  }
 
   if (record.kind === 'vessel') {
     if (!nonEmpty(record.vesselId)) errors.push('vesselId is required');
@@ -199,10 +221,12 @@ export function validatePhysicalObservation(record: PhysicalObservation): string
     validateEvidenceValue('destination', record.destination, errors);
     validateEvidenceValue('dischargePort', record.dischargePort, errors);
     validateEvidenceValue('state', record.state, errors);
-    if (!CARGO_STATES.includes(record.state.value)) errors.push('state.value is not an allowed cargo state');
+    if (!oneOf(record.state.value, CARGO_STATES)) errors.push('state.value is not an allowed cargo state');
     if (record.quantity) {
-      const { amount, basis } = record.quantity.value;
+      const { amount, basis, unit } = record.quantity.value;
       if (!finite(amount) || amount <= 0) errors.push('quantity.amount must be > 0');
+      if (!oneOf(unit, CARGO_QUANTITY_UNITS)) errors.push('quantity.unit is invalid');
+      if (!oneOf(basis, CARGO_QUANTITY_BASES)) errors.push('quantity.basis is invalid');
       if (basis === 'reported' && record.quantity.evidenceClass !== 'observed') {
         errors.push('reported cargo quantity must use observed evidence class');
       }
@@ -223,6 +247,7 @@ export function validatePhysicalObservation(record: PhysicalObservation): string
   if (record.kind === 'port_event') {
     if (!nonEmpty(record.eventId)) errors.push('eventId is required');
     if (!nonEmpty(record.vesselId)) errors.push('vesselId is required');
+    if (!oneOf(record.eventType, PORT_EVENT_TYPES)) errors.push('eventType is invalid');
     validateEvidenceValue('port', record.port, errors);
     validateEvidenceValue('eventTime', record.eventTime, errors);
     if (!validIso(record.eventTime.value)) errors.push('eventTime.value must be an ISO-compatible timestamp');
@@ -235,6 +260,7 @@ export function validatePhysicalObservation(record: PhysicalObservation): string
     validateEvidenceValue('destination', record.destination, errors);
     validateEvidenceValue('eta', record.eta, errors);
     validateEvidenceValue('routeState', record.routeState, errors);
+    if (record.routeState && !oneOf(record.routeState.value, ROUTE_STATES)) errors.push('routeState.value is invalid');
     if (record.eta) {
       if (!validIso(record.eta.value.timestamp)) errors.push('eta.timestamp must be an ISO-compatible timestamp');
       const uncertainty = record.eta.value.uncertaintyHours;
@@ -246,7 +272,11 @@ export function validatePhysicalObservation(record: PhysicalObservation): string
     if (!nonEmpty(record.freightId)) errors.push('freightId is required');
     validateEvidenceValue('rate', record.rate, errors);
     if (!finite(record.rate.value.amount) || record.rate.value.amount <= 0) errors.push('rate.amount must be > 0');
-    if (!nonEmpty(record.rate.value.currency)) errors.push('rate.currency is required');
+    if (!oneOf(record.rate.value.unit, FREIGHT_UNITS)) errors.push('rate.unit is invalid');
+    if (record.rate.value.currency != null && !nonEmpty(record.rate.value.currency)) errors.push('rate.currency must be non-empty when supplied');
+    if (record.rate.value.unit !== 'worldscale' && !nonEmpty(record.rate.value.currency)) {
+      errors.push('rate.currency is required for monetary freight units');
+    }
   }
 
   return errors;
