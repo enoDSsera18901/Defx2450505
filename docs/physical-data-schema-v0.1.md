@@ -34,17 +34,19 @@ Cargo state is constrained to the physical-oil contract states. Missing grade, q
 
 ### PortEvent
 
-Represents arrival, departure, load, discharge or ship-to-ship events with evidence-bearing port and event time.
+Represents arrival, departure, load, discharge or ship-to-ship events with evidence-bearing port and event time. Runtime validation also rejects unknown event types even if an external adapter has bypassed TypeScript through an untyped provider payload.
 
 ### RouteEstimate
 
-Represents route/destination/ETA state. Estimated ETA requires a method. ETA uncertainty cannot be negative.
+Represents route/destination/ETA state. Estimated ETA requires a method. ETA uncertainty cannot be negative and route state is runtime-constrained to the canonical underway/anchored/waiting/diverted/unknown values.
 
 The object is deliberately called `RouteEstimate`; it does not turn a destination string or AIS extrapolation into an observed arrival time.
 
 ### FreightObservation
 
-Represents a sourced freight/rate observation with explicit amount, currency and unit. Zero/missing freight is invalid rather than silently becoming a free landed-cost component.
+Represents a sourced freight/rate observation with explicit amount and unit. Monetary rates require a currency. `worldscale` is intentionally treated as a dimensionless Worldscale points observation and therefore does not invent a currency denomination. Zero/missing freight is invalid rather than silently becoming a free landed-cost component.
+
+Supported units are `usd_per_bbl`, `usd_per_mt`, `worldscale` and `lumpsum`; unknown provider units fail runtime validation until an explicit mapping is defined.
 
 ## EvidenceValue
 
@@ -58,6 +60,8 @@ Every optional physical field that carries meaning uses an evidence wrapper:
 - optional 0..1 evidence/identification confidence.
 
 `confidence` is evidence quality, not the probability of a market outcome.
+
+Runtime validation re-checks evidence-class values rather than trusting compile-time TypeScript alone. This matters because licensed provider payloads begin as external/untyped data.
 
 ## Provenance
 
@@ -81,10 +85,15 @@ Provider IDs are retained even after normalization so a later audit can trace th
 - missing provider/stable identity;
 - malformed timestamps;
 - confidence outside 0..1;
+- invalid runtime record/evidence enum values;
 - non-observed values without a method;
 - impossible latitude/longitude;
 - non-positive cargo quantity or freight rate;
+- unknown cargo quantity units/bases;
 - inconsistent cargo quantity basis/evidence class;
+- unknown port-event or route-state values;
+- unknown freight units;
+- missing currency for monetary freight rates;
 - reversed load windows;
 - invalid ETA timestamps or negative uncertainty.
 
@@ -99,7 +108,8 @@ A future Kpler/Vortexa/Spire adapter should:
 3. call `assertPhysicalObservation()` before returning a normalized object;
 4. preserve fields it cannot defend as missing/unavailable;
 5. never infer cargo grade/volume from AIS position alone;
-6. keep provider-supplied estimates distinguishable from LastBarrel-derived values.
+6. keep provider-supplied estimates distinguishable from LastBarrel-derived values;
+7. fail closed on vendor enum/unit values that have no reviewed canonical mapping.
 
 ## Current gate
 
