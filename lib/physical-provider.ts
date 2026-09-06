@@ -91,6 +91,7 @@ const CAPABILITY_METHODS: Record<ProviderCapability, keyof PhysicalOilProvider> 
   freight_observations: 'getFreightObservations',
 };
 
+const OBSERVATION_KINDS = ['vessel', 'cargo', 'port_event', 'route', 'freight'] as const;
 const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const validIso = (value: unknown): value is string => nonEmpty(value) && !Number.isNaN(Date.parse(value));
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -190,16 +191,17 @@ export function validateProviderResult<T extends PhysicalObservation>(
 ): string[] {
   const errors: string[] = [];
   if (!nonEmpty(expectedProviderId)) errors.push('expected provider ID is required');
-  if (!oneOf(expectedKind, ['vessel', 'cargo', 'port_event', 'route', 'freight'])) errors.push('expected observation kind is invalid');
+  if (!oneOf(expectedKind, OBSERVATION_KINDS)) errors.push('expected observation kind is invalid');
   if (!nonEmpty(result.providerId)) errors.push('result.providerId is required');
   else if (result.providerId !== expectedProviderId) {
     errors.push(`result.providerId ${result.providerId} does not match adapter ${expectedProviderId}`);
   }
   if (!validIso(result.retrievedAt)) errors.push('result.retrievedAt must be an ISO-compatible timestamp');
-  if (!Array.isArray(result.warnings) || result.warnings.some((warning) => !nonEmpty(warning))) {
-    errors.push('result.warnings must contain only non-empty strings');
-  }
-  if (result.partial && result.warnings.length === 0) {
+  if (result.requestId != null && !nonEmpty(result.requestId)) errors.push('result.requestId must be non-empty when supplied');
+
+  const warningsValid = Array.isArray(result.warnings) && result.warnings.every((warning) => nonEmpty(warning));
+  if (!warningsValid) errors.push('result.warnings must contain only non-empty strings');
+  if (result.partial && (!Array.isArray(result.warnings) || result.warnings.length === 0)) {
     errors.push('partial provider result requires at least one warning explaining degradation');
   }
   if (!Array.isArray(result.records)) {
@@ -208,8 +210,20 @@ export function validateProviderResult<T extends PhysicalObservation>(
   }
 
   result.records.forEach((record, index) => {
+    if (!record || typeof record !== 'object') {
+      errors.push(`records[${index}] must be a normalized physical observation`);
+      return;
+    }
+    if (!oneOf(record.kind, OBSERVATION_KINDS)) {
+      errors.push(`records[${index}].kind is invalid`);
+      return;
+    }
     if (record.kind !== expectedKind) {
       errors.push(`records[${index}].kind ${record.kind} does not match expected ${expectedKind}`);
+    }
+    if (!record.provenance || typeof record.provenance !== 'object') {
+      errors.push(`records[${index}].provenance is required`);
+      return;
     }
     if (record.provenance.provider !== expectedProviderId) {
       errors.push(`records[${index}].provenance.provider does not match adapter ${expectedProviderId}`);
