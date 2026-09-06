@@ -111,7 +111,6 @@ export type IncompleteLandedCostResult = {
 export type LandedCostResult = CompleteLandedCostResult | IncompleteLandedCostResult;
 
 const EVIDENCE_CLASSES = ['observed', 'derived', 'estimated', 'forecast', 'scenario'] as const;
-const REQUIRED_SET = new Set<LandedCostComponentKind>(REQUIRED_LANDED_COST_COMPONENTS);
 const OPTIONAL_SET = new Set<LandedCostComponentKind>(OPTIONAL_LANDED_COST_COMPONENTS);
 
 const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
@@ -270,7 +269,10 @@ export function calculateLandedCost(input: LandedCostInput): LandedCostResult {
   if (input?.components && typeof input.components === 'object') {
     for (const kind of LANDED_COST_COMPONENTS) {
       const slot = input.components[kind];
-      if (slot?.status === 'unavailable') unavailableComponentKinds.push(kind);
+      if (slot?.status === 'unavailable') {
+        unavailableComponentKinds.push(kind);
+        errors.push(`${kind} is unavailable; landed cost cannot be calculated`);
+      }
     }
   }
 
