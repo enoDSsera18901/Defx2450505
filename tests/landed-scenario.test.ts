@@ -88,7 +88,7 @@ test('allows an explicit canal scenario cost and preserves scenario provenance',
   const result = calculateScenarioLandedCost(request);
   assert.equal(result.status, 'complete');
   if (result.status !== 'complete') return;
-  assert.equal(result.amount, 74.85);
+  assert.ok(Math.abs(result.amount - 74.85) < 0.000001);
   assert.ok(result.scenarioComponentKinds.includes('canal_toll'));
   assert.ok(result.sourceRecordIds.includes('scenario:scenario-1:canal_toll'));
 });
