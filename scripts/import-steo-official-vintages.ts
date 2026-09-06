@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { getOfficialSteoArchiveEntries } from '../lib/steo-official-archive-manifest';
-import { writeOfficialSteoVintage } from '../lib/steo-official-vintage';
+import { writeVerifiedOfficialSteoVintage } from '../lib/steo-official-vintage-integrity';
 import { fetchOfficialSteoVintage } from '../lib/steo-official-vintage-xlsx';
 
 async function main() {
@@ -15,7 +15,7 @@ async function main() {
   const results = [];
   for (const entry of entries) {
     const vintage = await fetchOfficialSteoVintage(entry, importedAt);
-    const stored = writeOfficialSteoVintage(vintage, directory);
+    const stored = writeVerifiedOfficialSteoVintage(vintage, directory);
     results.push({
       issue: vintage.issue,
       releaseDate: vintage.releaseDate,
@@ -26,7 +26,7 @@ async function main() {
       revisionFingerprint: vintage.revisionFingerprint,
       historicalPeriods: vintage.historical.length,
       forecastPeriods: vintage.forecast.length,
-      status: stored.created ? 'imported-new-source-artifact' : 'source-artifact-already-present',
+      status: stored.created ? 'imported-new-source-artifact' : 'source-artifact-already-present-and-normalization-verified',
       path: stored.path,
     });
   }
