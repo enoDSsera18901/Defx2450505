@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "test:physical": "tsx --test tests/physical-data.test.ts",
-    "test:provider": "tsx --test tests/physical-provider.test.ts"
+    "test:provider": "tsx --test tests/physical-provider.test.ts",
+    "test:trial": "tsx --test tests/provider-trial.test.ts",
+    "trial:report": "tsx scripts/provider-trial-report.ts"
   },
   "dependencies": {
     "next": "15.2.4",
