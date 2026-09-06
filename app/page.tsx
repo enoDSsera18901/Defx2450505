@@ -1,3 +1,8 @@
+ 'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { calculateConfidence } from '../lib/confidence';
+
 const grades = [
   { name: 'Brent', price: '$92.41', move: '+1.8%', tone: 'up', note: 'North Sea benchmark' },
   { name: 'WTI', price: '$88.76', move: '+1.4%', tone: 'up', note: 'US benchmark' },
@@ -28,6 +33,16 @@ const forwardSupply = [
 ];
 
 export default function Home() {
+  const [market, setMarket] = useState<any>(null);
+  const [feedStatus, setFeedStatus] = useState<'loading' | 'live' | 'fallback'>('loading');
+  useEffect(() => { fetch('/api/market').then((r) => r.json()).then((payload) => { setFeedStatus(payload.status); setMarket(payload.data); }).catch(() => setFeedStatus('fallback')); }, []);
+  const displayGrades = useMemo(() => grades.map((g) => {
+    const series = g.name === 'Brent' ? market?.prices?.brent : g.name === 'WTI' ? market?.prices?.wti : null;
+    const latest = series?.[0];
+    const previous = series?.[1];
+    return latest ? { ...g, price: `$${latest.value.toFixed(2)}`, move: previous ? `${latest.value >= previous.value ? '+' : ''}${((latest.value / previous.value - 1) * 100).toFixed(1)}%` : '—', note: `${g.note} · EIA ${latest.period}` } : g;
+  }), [market]);
+  const confidence = market ? calculateConfidence(market.confidenceInputs) : null;
   const max = 105;
   const min = 101;
 
@@ -65,8 +80,14 @@ export default function Home() {
           </div>
         </header>
 
+        <section className="card" style={{ marginBottom: 18 }}>
+          <div className="sectionHead"><div><p className="eyebrow">DATA PROVENANCE</p><h2>{feedStatus === 'live' ? 'EIA public feed connected' : feedStatus === 'loading' ? 'Connecting to EIA…' : 'EIA feed unavailable — demo values retained'}</h2></div><span className={`status ${feedStatus === 'live' ? 'good' : ''}`}>{feedStatus.toUpperCase()}</span></div>
+          <p className="subtle">{market ? `${market.source} · ${market.freshnessLabel} · confidence freshness input ${market.freshness}/100` : 'The dashboard will show the last demo snapshot until the public feed responds.'} <a href="https://www.eia.gov/opendata/" target="_blank" rel="noreferrer">View source ↗</a></p>
+          {confidence && <div className="availability"><span>Data-derived confidence</span><strong>{confidence.score}/100 · {confidence.band}</strong><small>Freshness, source quality, physical coverage and risk inputs are now calculated from the feed adapter; shipping and forward outlook remain mocked.</small></div>}
+        </section>
+
         <section className="metricGrid" id="prices">
-          {grades.map((g) => (
+          {displayGrades.map((g) => (
             <article className="card metric" key={g.name}>
               <div className="metricHead"><span>{g.name}</span><span className="badge">LIVE</span></div>
               <div className="priceRow"><strong>{g.price}</strong><span className={g.tone}>{g.move}</span></div>
@@ -137,7 +158,15 @@ export default function Home() {
               );
             })}
           </div>
-          <div className="forecastCallout"><strong>Base case:</strong> surplus widens into Q1 as non-OPEC growth and scheduled OPEC+ additions outpace demand. <span>Confidence 81/100.</span></div>
+          <div className="forecastCallout"><strong>Illustrative scenario:</strong> forward balance is still mocked pending an EIA/STEO forecast adapter. <span>Not live.</span></div>
+        </section>
+
+        <section className="card chartCard">
+          <div className="sectionHead"><div><p className="eyebrow">EIA HISTORY</p><h2>U.S. crude inventories</h2></div><span className="status">Weekly · excluding SPR</span></div>
+          {market?.inventories?.length ? <div className="forecastChart">
+            {market.inventories.slice(0, 8).reverse().map((x: { period: string; value: number }) => <div className="month" key={x.period}><div className="bars"><span className="bar supplyBar" style={{ height: `${Math.max(8, (x.value / Math.max(...market.inventories.map((i: { value: number }) => i.value))) * 100)}%` }} /></div><strong>{x.period.slice(5)}</strong><small>{(x.value / 1000).toFixed(0)}m</small></div>)}
+          </div> : <p className="subtle">Waiting for the live EIA inventory series.</p>}
+          <div className="forecastCallout"><strong>Live series:</strong> EIA WCESTUS1, ending stocks excluding the Strategic Petroleum Reserve. Price history uses RBRTE and RWTC monthly spot series.</div>
         </section>
 
         <section className="twoCol lower">
@@ -182,8 +211,9 @@ export default function Home() {
           </div>
         </section>
 
-        <footer>LASTBARREL MVP · DEMONSTRATION DATA ONLY · LIVE DATA CONNECTORS TO BE ADDED</footer>
+        <footer>LASTBARREL · EIA PRICES + INVENTORIES LIVE · CARGOES, LANDED COST AND FORWARD OUTLOOK DEMONSTRATION DATA</footer>
       </section>
     </main>
   );
 }
+
