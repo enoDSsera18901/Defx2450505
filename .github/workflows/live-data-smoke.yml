@@ -35,12 +35,13 @@ jobs:
           done
           cat /tmp/lastbarrel.log
           exit 1
-      - name: Verify live EIA and STEO payload
+      - name: Verify live EIA, derived snapshot and STEO payload
         run: |
           node <<'NODE'
           const fs = require('node:fs');
           const payload = JSON.parse(fs.readFileSync('/tmp/market.json', 'utf8'));
           const fail = (message) => { throw new Error(message); };
+          const close = (a, b) => Math.abs(a - b) < 1e-6;
           if (payload.status !== 'live') fail(`Expected live core EIA status, got ${payload.status}`);
           const data = payload.data;
           if (!Array.isArray(data?.prices?.brent) || data.prices.brent.length < 2) fail('Brent EIA series missing');
@@ -56,10 +57,35 @@ jobs:
             if (point.classification !== 'forecast') fail('STEO point not labelled forecast');
             if (!Number.isFinite(point.supplyMbpd) || !Number.isFinite(point.demandMbpd) || !Number.isFinite(point.balanceMbpd)) fail('Invalid STEO numeric point');
           }
+
+          const snapshot = data?.publicSnapshot;
+          if (snapshot?.method !== 'eia-public-derived-snapshot-v1') fail('Public market snapshot method missing or unexpected');
+          const spread = snapshot.brentWtiSpread;
+          if (!spread) fail('Live public snapshot did not produce a same-period Brent-WTI spread');
+          const brentPoint = data.prices.brent.find((point) => point.period === spread.period);
+          const wtiPoint = data.prices.wti.find((point) => point.period === spread.period);
+          if (!brentPoint || !wtiPoint) fail('Snapshot spread period does not exist in both live price series');
+          if (!close(spread.spreadUsdBbl, brentPoint.value - wtiPoint.value)) fail('Snapshot Brent-WTI arithmetic does not reconcile to live source values');
+          if (spread.classification !== 'derived-public-price-observation') fail('Snapshot spread evidence classification is wrong');
+
+          const inventoryChange = snapshot.inventoryChange;
+          if (!inventoryChange) fail('Live public snapshot did not produce an inventory change');
+          const distinctInventories = [...new Map(data.inventories.map((point) => [point.period, point])).values()].sort((a, b) => b.period.localeCompare(a.period));
+          if (inventoryChange.latestPeriod !== distinctInventories[0]?.period || inventoryChange.previousPeriod !== distinctInventories[1]?.period) fail('Snapshot inventory periods do not match the two latest distinct live observations');
+          if (!close(inventoryChange.deltaThousandBarrels, distinctInventories[0].value - distinctInventories[1].value)) fail('Snapshot inventory arithmetic does not reconcile to live source values');
+          if (inventoryChange.classification !== 'derived-public-inventory-observation') fail('Snapshot inventory evidence classification is wrong');
+
+          const nearTermSnapshot = snapshot.nearTermBalance;
+          const earliestForecast = [...balance.forecast].sort((a, b) => a.period.localeCompare(b.period))[0];
+          if (!nearTermSnapshot || nearTermSnapshot.period !== earliestForecast.period) fail('Snapshot near-term balance does not match earliest live STEO forecast period');
+          if (nearTermSnapshot.classification !== 'forecast') fail('Snapshot near-term balance lost forecast classification');
+          if (!Array.isArray(snapshot.limitations) || !snapshot.limitations.some((item) => item.includes('bullish/bearish score'))) fail('Snapshot descriptive/no-score limitation missing');
+
           console.log(JSON.stringify({
             coreStatus: payload.status,
             brentLatest: data.prices.brent[0].period,
             inventoryLatest: data.inventories[0].period,
+            publicSnapshot: snapshot,
             steoFirstForecast: balance.forecast[0],
             steoSeries: balance.seriesIds,
             steoRevisionFingerprint: balance.revisionFingerprint,
