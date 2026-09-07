@@ -1,3 +1,4 @@
+import { derivePublicMarketSnapshot } from './public-market-snapshot';
 import { getSteoGlobalBalance } from './steo';
 
 export type EiaObservation = {
@@ -31,6 +32,12 @@ export async function getEiaMarketData() {
   const latestPeriod = inventories[0]?.period;
   const freshnessHours = latestPeriod ? Math.max(0, (Date.now() - new Date(`${latestPeriod}T00:00:00Z`).getTime()) / 36e5) : 1000;
   const freshness = Math.round(Math.max(0, Math.min(100, 100 - freshnessHours * 0.7)));
+  const publicSnapshot = derivePublicMarketSnapshot({
+    brent,
+    wti,
+    inventories,
+    steoForecast: steoResult.data?.forecast ?? null,
+  });
 
   return {
     source: 'U.S. Energy Information Administration (EIA) API',
@@ -40,6 +47,7 @@ export async function getEiaMarketData() {
     freshnessLabel: `${Math.round(freshnessHours)}h since latest inventory observation`,
     prices: { brent, wti },
     inventories,
+    publicSnapshot,
     globalBalance: steoResult.data,
     globalBalanceError: steoResult.error,
   };
