@@ -94,16 +94,19 @@ jobs:
           NODE
       - name: Verify archive checkout stayed clean
         run: git diff --exit-code -- data/steo-official-vintages
-      - name: Verify scenario lab production route
+      - name: Verify scenario lab production route and analysis bundle
         run: |
           curl --fail --silent --show-error http://127.0.0.1:3000/scenarios -o /tmp/scenarios.html
           grep -F "Landed cost scenario lab" /tmp/scenarios.html
           grep -F "NOT LIVE PHYSICAL DATA" /tmp/scenarios.html
           grep -F "No default freight, fees or insurance values are preloaded" /tmp/scenarios.html
-          grep -F "ANALYST STRESS · SCENARIO ONLY" /tmp/scenarios.html
-          grep -F "One-at-a-time sensitivity" /tmp/scenarios.html
-          grep -F "EVIDENCE CHAIN" /tmp/scenarios.html
-          grep -F "Why this total exists" /tmp/scenarios.html
+          scenario_chunk=$(grep -o '/_next/static/chunks/app/scenarios/page-[^" ]*\.js' /tmp/scenarios.html | head -n 1)
+          test -n "$scenario_chunk"
+          curl --fail --silent --show-error "http://127.0.0.1:3000${scenario_chunk}" -o /tmp/scenario-page.js
+          grep -F "ANALYST STRESS · SCENARIO ONLY" /tmp/scenario-page.js
+          grep -F "One-at-a-time sensitivity" /tmp/scenario-page.js
+          grep -F "EVIDENCE CHAIN" /tmp/scenario-page.js
+          grep -F "Why this total exists" /tmp/scenario-page.js
       - name: Show server log on failure
         if: failure()
         run: cat /tmp/lastbarrel.log || true
