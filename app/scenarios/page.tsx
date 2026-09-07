@@ -1,8 +1,23 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { calculateScenarioLandedCost, type ObservedCrudeBasis } from '../../lib/landed-scenario';
-import type { LandedCostResult } from '../../lib/landed-cost';
+import {
+  buildScenarioLandedCostInput,
+  type LandedCostScenarioRequest,
+  type ObservedCrudeBasis,
+} from '../../lib/landed-scenario';
+import {
+  calculateLandedCost,
+  type LandedCostComponentKind,
+  type LandedCostInput,
+  type LandedCostResult,
+} from '../../lib/landed-cost';
+import {
+  analyzeLandedCostSensitivity,
+  explainLandedCost,
+  type LandedCostEvidenceChain,
+  type LandedCostSensitivityResult,
+} from '../../lib/landed-cost-analysis';
 import styles from './scenario.module.css';
 
 type PricePoint = { period: string; value: number; units: string };
@@ -21,6 +36,8 @@ type FormValues = {
   financingTime: string;
 };
 
+type SensitivityMode = 'absolute_per_bbl' | 'percent_of_normalized_component';
+
 const emptyValues: FormValues = {
   crudeBasis: '',
   freight: '',
@@ -31,7 +48,7 @@ const emptyValues: FormValues = {
   financingTime: '',
 };
 
-const labels: Record<string, string> = {
+const labels: Record<LandedCostComponentKind, string> = {
   crude_basis: 'Crude basis',
   freight: 'Freight',
   insurance: 'Insurance',
@@ -61,12 +78,20 @@ export default function ScenarioLabPage() {
   const [financingApplies, setFinancingApplies] = useState(false);
   const [values, setValues] = useState<FormValues>(emptyValues);
   const [result, setResult] = useState<LandedCostResult | null>(null);
+  const [baseInput, setBaseInput] = useState<LandedCostInput | null>(null);
+  const [evidence, setEvidence] = useState<LandedCostEvidenceChain | null>(null);
+  const [sensitivity, setSensitivity] = useState<LandedCostSensitivityResult | null>(null);
+  const [sensitivityKind, setSensitivityKind] = useState<LandedCostComponentKind>('freight');
+  const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>('absolute_per_bbl');
+  const [sensitivityValue, setSensitivityValue] = useState('1');
+  const [sensitivityInputError, setSensitivityInputError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/market')
       .then((response) => response.json())
       .then((payload) => {
         if (payload?.status === 'live' && payload?.data) {
+          resetOutputs();
           setMarket(payload.data as MarketPayload);
           setFeedState('live');
         } else {
@@ -89,34 +114,82 @@ export default function ScenarioLabPage() {
         }
       : null;
 
+  function resetOutputs() {
+    setResult(null);
+    setBaseInput(null);
+    setEvidence(null);
+    setSensitivity(null);
+    setSensitivityInputError(null);
+  }
+
   function setField(field: keyof FormValues, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
-    setResult(null);
+    resetOutputs();
   }
 
   function calculate(event: FormEvent) {
     event.preventDefault();
     const calculatedAt = new Date().toISOString();
     const calculationId = `scenario-${Date.now()}`;
+    const request: LandedCostScenarioRequest = {
+      calculationId,
+      calculatedAt,
+      observedCrudeBasis: observedBrent,
+      assumptions: {
+        crudeBasisPerBbl: observedBrent ? null : parseAmount(values.crudeBasis),
+        freightPerBbl: parseAmount(values.freight),
+        insurancePerBbl: parseAmount(values.insurance),
+        portTerminalPerBbl: parseAmount(values.portTerminal),
+        qualityLocationDifferentialPerBbl: parseAmount(values.differential),
+        canalTollApplies: canalApplies,
+        canalTollPerBbl: canalApplies ? parseAmount(values.canalToll) : null,
+        financingTimeCostApplies: financingApplies,
+        financingTimeCostPerBbl: financingApplies ? parseAmount(values.financingTime) : null,
+      },
+    };
 
-    setResult(
-      calculateScenarioLandedCost({
-        calculationId,
-        calculatedAt,
-        observedCrudeBasis: observedBrent,
-        assumptions: {
-          crudeBasisPerBbl: observedBrent ? null : parseAmount(values.crudeBasis),
-          freightPerBbl: parseAmount(values.freight),
-          insurancePerBbl: parseAmount(values.insurance),
-          portTerminalPerBbl: parseAmount(values.portTerminal),
-          qualityLocationDifferentialPerBbl: parseAmount(values.differential),
-          canalTollApplies: canalApplies,
-          canalTollPerBbl: canalApplies ? parseAmount(values.canalToll) : null,
-          financingTimeCostApplies: financingApplies,
-          financingTimeCostPerBbl: financingApplies ? parseAmount(values.financingTime) : null,
-        },
-      }),
-    );
+    const input = buildScenarioLandedCostInput(request);
+    const calculated = calculateLandedCost(input);
+    const explained = explainLandedCost(input);
+
+    setBaseInput(input);
+    setResult(calculated);
+    setEvidence(explained);
+    setSensitivity(null);
+    setSensitivityInputError(null);
+
+    if (calculated.status === 'complete' && !calculated.components.some((component) => component.kind === sensitivityKind)) {
+      setSensitivityKind(calculated.components[0]?.kind ?? 'crude_basis');
+    }
+  }
+
+  function runSensitivity() {
+    if (!baseInput || result?.status !== 'complete') return;
+    const requested = Number(sensitivityValue);
+    if (!Number.isFinite(requested)) {
+      setSensitivity(null);
+      setSensitivityInputError('Enter a finite stress value.');
+      return;
+    }
+
+    setSensitivityInputError(null);
+    const shock = sensitivityMode === 'absolute_per_bbl'
+      ? {
+          shockId: `ui-${sensitivityKind}-absolute`,
+          componentKind: sensitivityKind,
+          mode: 'absolute_per_bbl' as const,
+          deltaPerBbl: requested,
+          note: 'Scenario Lab analyst stress',
+        }
+      : {
+          shockId: `ui-${sensitivityKind}-percent`,
+          componentKind: sensitivityKind,
+          mode: 'percent_of_normalized_component' as const,
+          percent: requested,
+          note: 'Scenario Lab analyst stress',
+        };
+
+    setSensitivity(analyzeLandedCostSensitivity(`ui-sensitivity-${result.calculationId}`, baseInput, [shock]));
   }
 
   return (
@@ -167,7 +240,7 @@ export default function ScenarioLabPage() {
                   disabled={!latestBrent || !brentAsOf}
                   onChange={(event) => {
                     setUseObservedBrent(event.target.checked);
-                    setResult(null);
+                    resetOutputs();
                   }}
                 />
               </div>
@@ -200,13 +273,13 @@ export default function ScenarioLabPage() {
               <div className={styles.optional}>
                 <div className={styles.toggleRow}>
                   <div className={styles.toggleLabel}><strong>Canal / toll applies</strong><span>Leave off only when the scenario route genuinely avoids a canal/toll.</span></div>
-                  <input className={styles.checkbox} type="checkbox" checked={canalApplies} onChange={(event) => { setCanalApplies(event.target.checked); setResult(null); }} />
+                  <input className={styles.checkbox} type="checkbox" checked={canalApplies} onChange={(event) => { setCanalApplies(event.target.checked); resetOutputs(); }} />
                 </div>
                 {canalApplies && <ScenarioField id="canal" label="Canal / toll · USD/bbl" value={values.canalToll} onChange={(value) => setField('canalToll', value)} required />}
 
                 <div className={styles.toggleRow}>
                   <div className={styles.toggleLabel}><strong>Financing / time cost applies</strong><span>Switch on when you want the scenario to include carrying/time cost.</span></div>
-                  <input className={styles.checkbox} type="checkbox" checked={financingApplies} onChange={(event) => { setFinancingApplies(event.target.checked); setResult(null); }} />
+                  <input className={styles.checkbox} type="checkbox" checked={financingApplies} onChange={(event) => { setFinancingApplies(event.target.checked); resetOutputs(); }} />
                 </div>
                 {financingApplies && <ScenarioField id="finance" label="Financing / time cost · USD/bbl" value={values.financingTime} onChange={(value) => setField('financingTime', value)} required />}
               </div>
@@ -240,11 +313,87 @@ export default function ScenarioLabPage() {
                 <div className={styles.rows}>
                   {result.components.map((component) => (
                     <div className={styles.row} key={component.kind}>
-                      <span>{labels[component.kind] ?? component.kind} · {component.evidenceClass}</span>
+                      <span>{labels[component.kind]} · {component.evidenceClass}</span>
                       <strong>{component.amount < 0 ? '−' : ''}${Math.abs(component.amount).toFixed(2)}</strong>
                     </div>
                   ))}
                 </div>
+
+                <div className={styles.analysisBox}>
+                  <p className={styles.sectionLabel}>ANALYST STRESS · SCENARIO ONLY</p>
+                  <h3>One-at-a-time sensitivity</h3>
+                  <p className={styles.analysisText}>Stress one normalized component. The base source observations remain unchanged and the stressed result is always scenario-labelled.</p>
+                  <div className={styles.analysisGrid}>
+                    <div className={styles.field}>
+                      <label htmlFor="sensitivity-component">Component</label>
+                      <select
+                        id="sensitivity-component"
+                        className={styles.input}
+                        value={sensitivityKind}
+                        onChange={(event) => { setSensitivityKind(event.target.value as LandedCostComponentKind); setSensitivity(null); }}
+                      >
+                        {result.components.map((component) => <option key={component.kind} value={component.kind}>{labels[component.kind]}</option>)}
+                      </select>
+                    </div>
+                    <div className={styles.field}>
+                      <label htmlFor="sensitivity-mode">Stress basis</label>
+                      <select
+                        id="sensitivity-mode"
+                        className={styles.input}
+                        value={sensitivityMode}
+                        onChange={(event) => { setSensitivityMode(event.target.value as SensitivityMode); setSensitivity(null); }}
+                      >
+                        <option value="absolute_per_bbl">Absolute target-currency / bbl</option>
+                        <option value="percent_of_normalized_component">Percent of normalized component</option>
+                      </select>
+                    </div>
+                    <div className={styles.fieldFull}>
+                      <label htmlFor="sensitivity-value">{sensitivityMode === 'absolute_per_bbl' ? 'Change · USD/bbl' : 'Change · percent'}</label>
+                      <div className={styles.inlineAction}>
+                        <input id="sensitivity-value" className={styles.input} type="number" step="0.01" value={sensitivityValue} onChange={(event) => { setSensitivityValue(event.target.value); setSensitivity(null); setSensitivityInputError(null); }} />
+                        <button className={styles.secondaryButton} type="button" onClick={runSensitivity}>Run stress</button>
+                      </div>
+                    </div>
+                  </div>
+                  {sensitivityInputError && <div className={styles.analysisError}>{sensitivityInputError}</div>}
+                  {sensitivity?.status === 'incomplete' && <ul className={styles.errors}>{sensitivity.errors.map((error) => <li key={error}>{error}</li>)}</ul>}
+                  {sensitivity?.status === 'complete' && sensitivity.points[0] && (
+                    <div className={styles.stressResult}>
+                      <span>SCENARIO STRESSED LANDED COST</span>
+                      <strong>${sensitivity.points[0].stressedLandedCost.toFixed(2)}</strong>
+                      <small>
+                        {sensitivity.points[0].landedCostDelta >= 0 ? '+' : '−'}${Math.abs(sensitivity.points[0].landedCostDelta).toFixed(2)}/bbl vs base · {sensitivity.points[0].landedCostDeltaPercent >= 0 ? '+' : ''}{sensitivity.points[0].landedCostDeltaPercent.toFixed(2)}%
+                      </small>
+                    </div>
+                  )}
+                </div>
+
+                {evidence?.status === 'complete' && (
+                  <div className={styles.analysisBox}>
+                    <p className={styles.sectionLabel}>EVIDENCE CHAIN</p>
+                    <h3>Why this total exists</h3>
+                    <p className={styles.analysisText}>Each contribution retains its input evidence and source record IDs through normalization. Source IDs reference upstream records; they are not replaced by the arithmetic result.</p>
+                    <div className={styles.evidenceList}>
+                      {evidence.components.map((entry) => entry.status === 'not_applicable' ? (
+                        <div className={styles.evidenceItem} key={entry.componentKind}>
+                          <div><strong>{labels[entry.componentKind]}</strong><span>not applicable</span></div>
+                          <p>{entry.rationale}</p>
+                        </div>
+                      ) : (
+                        <div className={styles.evidenceItem} key={entry.componentKind}>
+                          <div>
+                            <strong>{labels[entry.componentKind]}</strong>
+                            <span>{entry.inputEvidenceClass} → ${entry.normalizedAmount.toFixed(2)} {entry.targetCurrency}/bbl</span>
+                          </div>
+                          <p>Source: {entry.inputSourceRecordIds.join(', ')}</p>
+                          {entry.inputMethodId && <p>Method: {entry.inputMethodId}</p>}
+                          {entry.fx && <p>FX: {entry.fx.rate} {entry.fx.fromCurrency}→{entry.fx.toCurrency} · source {entry.fx.sourceRecordIds.join(', ')}</p>}
+                        </div>
+                      ))}
+                    </div>
+                    <div className={styles.aggregationLine}>Aggregation: {evidence.aggregation.methodId} · {evidence.aggregation.formula}</div>
+                  </div>
+                )}
               </>
             )}
 
