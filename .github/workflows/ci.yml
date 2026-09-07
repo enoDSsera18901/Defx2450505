@@ -31,6 +31,8 @@ jobs:
         run: npm run test:evidence-manifest
       - name: Public market archive tests
         run: npm run test:public-archive
+      - name: Public source-state comparison tests
+        run: npm run test:public-history
       - name: Public EIA brief tests
         run: npm run test:public-brief
       - name: Landed-cost engine tests
