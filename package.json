@@ -15,7 +15,7 @@
     "test:steo-revision": "tsx --test tests/steo-revision.test.ts",
     "test:steo-archive": "tsx --test tests/steo-snapshot-store.test.ts",
     "test:steo-backtest": "tsx --test tests/steo-backtest.test.ts",
-    "test:steo-official": "tsx --test tests/steo-official-vintage.test.ts tests/steo-official-vintage-integrity.test.ts",
+    "test:steo-official": "tsx --test tests/steo-official-vintage.test.ts tests/steo-official-vintage-integrity.test.ts tests/steo-revision-intelligence.test.ts",
     "steo:capture": "tsx scripts/capture-steo-snapshot.ts",
     "steo:backtest": "tsx scripts/backtest-steo-snapshots.ts",
     "steo:import-official": "tsx scripts/import-steo-official-vintages.ts",
