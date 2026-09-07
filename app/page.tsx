@@ -62,6 +62,7 @@ export default function Home() {
                 <span className="navDot" />{item}
               </a>
             ))}
+            <a className="navItem" href="/revisions"><span className="navDot" />STEO Revisions</a>
             <a className="navItem" href="/scenarios"><span className="navDot" />Scenario Lab</a>
           </nav>
         </div>
@@ -155,6 +156,8 @@ export default function Home() {
             </div>
           ) : <p className="subtle" style={{ marginTop: 22 }}>STEO forecast data unavailable.</p>}
           <div className="forecastCallout"><strong>Source-backed forecast:</strong> EIA STEO monthly series PAPR_WORLD and PATC_WORLD. <span>Forecast, not live cargo availability.</span></div>
+          <a className="ghost" href="/revisions" style={{ display: 'inline-flex', marginTop: 14, textDecoration: 'none' }}>Open revision history →</a>
+          <p className="subtle" style={{ marginTop: 9 }}>Compare official STEO vintages to see what EIA changed between releases; revisions remain descriptive, not causal.</p>
         </section>
 
         <section className="card chartCard">
@@ -189,7 +192,7 @@ export default function Home() {
           </div>
         </section>
 
-        <footer>LASTBARREL · EIA PRICES + INVENTORIES LIVE WHEN AVAILABLE · EIA STEO GLOBAL BALANCE FORECAST · LIVE CARGOES AND LANDED COST REMAIN NO-DATA · SCENARIO LAB AVAILABLE FOR EXPLICIT ASSUMPTIONS</footer>
+        <footer>LASTBARREL · EIA PRICES + INVENTORIES LIVE WHEN AVAILABLE · EIA STEO GLOBAL BALANCE FORECAST + OFFICIAL REVISION HISTORY · LIVE CARGOES AND LANDED COST REMAIN NO-DATA · SCENARIO LAB AVAILABLE FOR EXPLICIT ASSUMPTIONS</footer>
       </section>
     </main>
   );
