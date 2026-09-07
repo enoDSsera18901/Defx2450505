@@ -94,6 +94,27 @@ jobs:
           NODE
       - name: Verify archive checkout stayed clean
         run: git diff --exit-code -- data/steo-official-vintages
+      - name: Verify STEO revision intelligence API and page
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:3000/api/steo/revisions -o /tmp/steo-revisions.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync('/tmp/steo-revisions.json', 'utf8'));
+          const fail = (message) => { throw new Error(message); };
+          if (payload.status !== 'available') fail(`Expected available revision intelligence, got ${payload.status}: ${payload.error ?? ''}`);
+          const data = payload.data;
+          if (data?.archive?.vintageCount !== 8) fail(`Expected 8 official vintages, got ${data?.archive?.vintageCount}`);
+          if (data?.archive?.firstIssue !== '2026-01' || data?.archive?.latestIssue !== '2026-08') fail('Unexpected revision archive endpoints');
+          if (data?.latestRevision?.baselineIssue !== '2026-07' || data?.latestRevision?.referenceIssue !== '2026-08') fail('Latest revision window is not Jul→Aug 2026');
+          if (!Array.isArray(data?.latestRevision?.largestForecastBalanceRevisions)) fail('Latest forecast revision ranking missing');
+          if (!Array.isArray(data?.archiveSpan?.largestLaterEstimateBalanceDifferences)) fail('Archive-span later-estimate ranking missing');
+          if (!Array.isArray(data?.limitations) || !data.limitations.some((item) => item.includes('public estimates'))) fail('Public-estimate limitation missing');
+          NODE
+          curl --fail --silent --show-error http://127.0.0.1:3000/revisions -o /tmp/revisions.html
+          grep -F "What changed between STEO releases?" /tmp/revisions.html
+          grep -F "LATEST RELEASE CHANGE" /tmp/revisions.html
+          grep -F "ARCHIVE-SPAN CHANGE" /tmp/revisions.html
+          grep -F "not explanations of market causality" /tmp/revisions.html
       - name: Verify scenario lab production route and analysis bundle
         run: |
           curl --fail --silent --show-error http://127.0.0.1:3000/scenarios -o /tmp/scenarios.html
