@@ -25,6 +25,8 @@ jobs:
         run: npm run test:provider
       - name: Provider-trial evaluator tests
         run: npm run test:trial
+      - name: Public market snapshot tests
+        run: npm run test:market-snapshot
       - name: Landed-cost engine tests
         run: npm run test:landed
       - name: Scenario-lab adapter tests
@@ -74,6 +76,8 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:3000/ -o /tmp/home.html
           grep -F 'Oil market overview' /tmp/home.html
           grep -F 'Physical providers not connected' /tmp/home.html
+          grep -F 'PUBLIC-DATA SNAPSHOT' /tmp/home.html
+          grep -F 'No bullish/bearish score and no causal interpretation.' /tmp/home.html
           grep -F 'STEO Revisions' /tmp/home.html
           grep -F 'Review STEO changes' /tmp/home.html
           grep -F 'Open Scenario Lab' /tmp/home.html
