@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:physical": "tsx --test tests/physical-data.test.ts",
+    "test:physical": "tsx --test tests/physical-data.test.ts tests/physical-reference.test.ts",
     "test:provider": "tsx --test tests/physical-provider.test.ts",
     "test:trial": "tsx --test tests/provider-trial.test.ts",
     "test:landed": "tsx --test tests/landed-cost.test.ts tests/landed-cost-analysis.test.ts",
