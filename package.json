@@ -30,7 +30,7 @@
     "provider:decision": "tsx scripts/provider-integration-decision.ts"
   },
   "dependencies": {
-    "@xmldom/xmldom": "^0.9.10",
+    "@xmldom/xmldom": "^0.9.12",
     "next": "15.5.24",
     "react": "19.0.8",
     "react-dom": "19.0.8",
