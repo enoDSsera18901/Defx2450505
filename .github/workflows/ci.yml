@@ -27,6 +27,8 @@ jobs:
         run: npm run test:trial
       - name: Public market snapshot tests
         run: npm run test:market-snapshot
+      - name: Public evidence manifest tests
+        run: npm run test:evidence-manifest
       - name: Public EIA brief tests
         run: npm run test:public-brief
       - name: Landed-cost engine tests
