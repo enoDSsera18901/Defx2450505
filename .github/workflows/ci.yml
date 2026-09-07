@@ -27,6 +27,8 @@ jobs:
         run: npm run test:trial
       - name: Public market snapshot tests
         run: npm run test:market-snapshot
+      - name: Public EIA brief tests
+        run: npm run test:public-brief
       - name: Landed-cost engine tests
         run: npm run test:landed
       - name: Scenario-lab adapter tests
@@ -79,7 +81,8 @@ jobs:
           grep -F 'PUBLIC-DATA SNAPSHOT' /tmp/home.html
           grep -F 'No bullish/bearish score and no causal interpretation.' /tmp/home.html
           grep -F 'STEO Revisions' /tmp/home.html
-          grep -F 'Review STEO changes' /tmp/home.html
+          grep -F 'Download public brief' /tmp/home.html
+          grep -F 'href="/api/brief"' /tmp/home.html
           grep -F 'Open Scenario Lab' /tmp/home.html
           grep -F 'Open revision history' /tmp/home.html
           if grep -F 'Export brief' /tmp/home.html || grep -F '+ Create alert' /tmp/home.html; then

@@ -83,7 +83,7 @@ export default function Home() {
             <p className="subtle">Public price, inventory and STEO outlook data with explicit physical-data gaps.</p>
           </div>
           <div className="topActions">
-            <a className="ghost" href="/revisions" style={{ textDecoration: 'none' }}>Review STEO changes</a>
+            <a className="ghost" href="/api/brief" style={{ textDecoration: 'none' }}>Download public brief</a>
             <a className="primary" href="/scenarios" style={{ textDecoration: 'none' }}>Open Scenario Lab</a>
           </div>
         </header>

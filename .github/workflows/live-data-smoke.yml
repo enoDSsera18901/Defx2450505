@@ -118,6 +118,16 @@ jobs:
             evidenceBoundary: backtest.evidenceBoundary,
           }, null, 2));
           NODE
+      - name: Verify public EIA brief download
+        run: |
+          curl --fail --silent --show-error -D /tmp/public-brief.headers http://127.0.0.1:3000/api/brief -o /tmp/public-brief.md
+          grep -iF 'content-type: text/markdown' /tmp/public-brief.headers
+          grep -Ei 'content-disposition: attachment; filename="lastbarrel-public-eia-brief-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md"' /tmp/public-brief.headers
+          grep -F '# LastBarrel Public EIA Evidence Brief' /tmp/public-brief.md
+          grep -F 'Scope: public EIA observations, EIA STEO forecasts, and preserved official STEO revision evidence only.' /tmp/public-brief.md
+          grep -F '8 official vintages, 2026-01 → 2026-08' /tmp/public-brief.md
+          grep -F 'Live cargo identity, volumes, destination/ETA, commitments and freight remain unavailable' /tmp/public-brief.md
+          grep -F 'No bullish/bearish score, trade recommendation, or physical-availability claim is produced by this brief.' /tmp/public-brief.md
       - name: Verify archive checkout stayed clean
         run: git diff --exit-code -- data/steo-official-vintages
       - name: Verify STEO revision intelligence API and page

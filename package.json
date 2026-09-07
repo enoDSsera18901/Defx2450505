@@ -11,6 +11,7 @@
     "test:provider": "tsx --test tests/physical-provider.test.ts",
     "test:trial": "tsx --test tests/provider-trial.test.ts tests/provider-commercial-rights.test.ts tests/provider-integration-decision.test.ts",
     "test:market-snapshot": "tsx --test tests/public-market-snapshot.test.ts",
+    "test:public-brief": "tsx --test tests/public-eia-brief.test.ts",
     "test:landed": "tsx --test tests/landed-cost.test.ts tests/landed-cost-analysis.test.ts",
     "test:scenario": "tsx --test tests/landed-scenario.test.ts",
     "test:steo-revision": "tsx --test tests/steo-revision.test.ts",

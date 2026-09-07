@@ -8,7 +8,9 @@ Message:
 
 > LastBarrel is an oil-market intelligence workspace built around explicit evidence classes. The current live layer uses public EIA data; unsupported physical-market fields stay visibly unavailable rather than being guessed.
 
-Show the feed state and the source-labelled Brent, WTI and inventory sections.
+Show the feed state and the source-labelled Brent, WTI and inventory sections. Then point to **PUBLIC-DATA SNAPSHOT** and show the Brent–WTI spread, weekly inventory change and near-term STEO balance.
+
+Emphasise that the panel is labelled **DESCRIPTIVE**: the spread and inventory change are arithmetic derived measures, the balance is still a forecast, and no bullish/bearish score is issued.
 
 ## 0:40–1:20 — Show what changed between outlooks
 
@@ -72,9 +74,20 @@ Show **Current versus pinned baseline** and the component attribution. Then use 
 
 Explain that stresses remain scenario-classified and never rewrite the source classification of the public EIA observation.
 
-## 4:20–5:00 — Close with the commercial gate
+## 4:20–5:00 — Export evidence and close with the commercial gate
 
-Return to the overview or provider/evidence discussion.
+Return to the overview and click **Download public brief**.
+
+Open the Markdown artifact and show that it contains:
+
+- live public EIA price/snapshot evidence;
+- official STEO revision context;
+- explicit unsupported physical-data gaps;
+- source links and timestamps;
+- no Scenario Lab assumptions represented as observed evidence;
+- no bullish/bearish score, trade recommendation or physical-availability claim.
+
+Then close with the provider boundary.
 
 Message:
 
@@ -88,9 +101,11 @@ A deployed demo is verified only after directly observing:
 
 - HTTPS root page load;
 - live or explicit fallback EIA state;
+- visible **PUBLIC-DATA SNAPSHOT** with descriptive/no-score labelling;
 - visible **STEO Revisions** navigation from the overview;
 - `/revisions` loads the latest-release and archive-span official-vintage comparisons;
 - revision limitations explicitly state the analysis is descriptive/non-causal and later-vintage values are public estimates;
+- **Download public brief** returns a Markdown attachment containing public evidence, revision context, explicit no-data gaps and evidence limitations;
 - unsupported grade `NO DATA` behaviour;
 - Scenario Lab route load;
 - fail-closed incomplete calculation;
