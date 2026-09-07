@@ -1,3 +1,4 @@
+import { buildPublicEvidenceManifest } from './public-evidence-manifest';
 import { derivePublicMarketSnapshot } from './public-market-snapshot';
 import { getSteoGlobalBalance } from './steo';
 
@@ -38,6 +39,22 @@ export async function getEiaMarketData() {
     inventories,
     steoForecast: steoResult.data?.forecast ?? null,
   });
+  const publicEvidenceManifest = buildPublicEvidenceManifest({
+    generatedAt: observedAt,
+    retrievedAt: observedAt,
+    brent,
+    wti,
+    inventories,
+    snapshot: publicSnapshot,
+    steo: steoResult.data
+      ? {
+          sourceUrl: steoResult.data.sourceUrl,
+          revisionFingerprint: steoResult.data.revisionFingerprint,
+          seriesIds: steoResult.data.seriesIds,
+          forecast: steoResult.data.forecast,
+        }
+      : null,
+  });
 
   return {
     source: 'U.S. Energy Information Administration (EIA) API',
@@ -48,6 +65,7 @@ export async function getEiaMarketData() {
     prices: { brent, wti },
     inventories,
     publicSnapshot,
+    publicEvidenceManifest,
     globalBalance: steoResult.data,
     globalBalanceError: steoResult.error,
   };
