@@ -253,19 +253,20 @@ export function analyzeLandedCostSensitivity(
       errors.push('every sensitivity shock requires a shockId');
       continue;
     }
-    if (seenShockIds.has(shock.shockId)) {
-      errors.push(`duplicate sensitivity shockId: ${shock.shockId}`);
+    const shockId = shock.shockId;
+    if (seenShockIds.has(shockId)) {
+      errors.push(`duplicate sensitivity shockId: ${shockId}`);
       continue;
     }
-    seenShockIds.add(shock.shockId);
+    seenShockIds.add(shockId);
 
     if (!LANDED_COST_COMPONENTS.includes(shock.componentKind)) {
-      errors.push(`${shock.shockId}.componentKind is invalid`);
+      errors.push(`${shockId}.componentKind is invalid`);
       continue;
     }
     const component = components.get(shock.componentKind);
     if (!component) {
-      errors.push(`${shock.shockId}: ${shock.componentKind} is not an available component in the base calculation`);
+      errors.push(`${shockId}: ${shock.componentKind} is not an available component in the base calculation`);
       continue;
     }
 
@@ -273,38 +274,38 @@ export function analyzeLandedCostSensitivity(
     let requestedChange: number;
     if (shock.mode === 'absolute_per_bbl') {
       if (!finite(shock.deltaPerBbl)) {
-        errors.push(`${shock.shockId}.deltaPerBbl must be finite`);
+        errors.push(`${shockId}.deltaPerBbl must be finite`);
         continue;
       }
       requestedChange = shock.deltaPerBbl;
       stressedComponentAmount = component.amount + shock.deltaPerBbl;
     } else if (shock.mode === 'percent_of_normalized_component') {
       if (!finite(shock.percent)) {
-        errors.push(`${shock.shockId}.percent must be finite`);
+        errors.push(`${shockId}.percent must be finite`);
         continue;
       }
       requestedChange = shock.percent;
       stressedComponentAmount = component.amount * (1 + shock.percent / 100);
     } else {
-      errors.push(`${shock.shockId}.mode is invalid`);
+      errors.push(`${shockId}.mode is invalid`);
       continue;
     }
 
     const stressedError = validateStressedAmount(shock.componentKind, stressedComponentAmount);
     if (stressedError) {
-      errors.push(`${shock.shockId}: ${stressedError}`);
+      errors.push(`${shockId}: ${stressedError}`);
       continue;
     }
 
     const componentDelta = stressedComponentAmount - component.amount;
     const stressedLandedCost = result.amount + componentDelta;
     if (!finite(stressedLandedCost) || stressedLandedCost <= 0) {
-      errors.push(`${shock.shockId}: stressed landed cost must be > 0`);
+      errors.push(`${shockId}: stressed landed cost must be > 0`);
       continue;
     }
 
     points.push({
-      shockId: shock.shockId,
+      shockId,
       componentKind: shock.componentKind,
       mode: shock.mode,
       requestedChange,
@@ -437,9 +438,7 @@ export function compareLandedCostInputs(
     return {
       status: 'incomplete',
       comparisonId,
-      errors: [
-        `component attribution ${attributedDelta} does not reconcile to landed-cost delta ${totalDeltaRightMinusLeft}`,
-      ],
+      errors: [`component attribution ${attributedDelta} does not reconcile to landed-cost delta ${totalDeltaRightMinusLeft}`],
     };
   }
 
