@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, type Document as XmlDocument, type Element as XmlElement } from '@xmldom/xmldom';
 import { Open } from 'unzipper-esm';
 import type { OfficialSteoVintage } from './steo-official-vintage';
 
@@ -63,15 +63,21 @@ export type OfficialSteoWorkbookStructure = {
   };
 };
 
-function localName(node: Element) {
+function localName(node: XmlElement) {
   return node.localName || node.nodeName.split(':').pop() || node.nodeName;
 }
 
-function descendants(parent: Document | Element, name: string): Element[] {
-  return Array.from(parent.getElementsByTagName('*')).filter((node) => localName(node) === name);
+function descendants(parent: XmlDocument | XmlElement, name: string): XmlElement[] {
+  const nodes = parent.getElementsByTagName('*');
+  const result: XmlElement[] = [];
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes.item(index);
+    if (node && localName(node) === name) result.push(node);
+  }
+  return result;
 }
 
-function parseXml(xml: string, label: string): Document {
+function parseXml(xml: string, label: string): XmlDocument {
   try {
     const document = new DOMParser().parseFromString(xml, 'application/xml');
     if (!document?.documentElement) throw new Error('document has no root element');
@@ -132,15 +138,15 @@ function columnName(index: number) {
   return result;
 }
 
-function directChild(element: Element, name: string): Element | undefined {
+function directChild(element: XmlElement, name: string): XmlElement | undefined {
   for (let index = 0; index < element.childNodes.length; index += 1) {
     const child = element.childNodes.item(index);
-    if (child?.nodeType === 1 && localName(child as Element) === name) return child as Element;
+    if (child?.nodeType === 1 && localName(child as XmlElement) === name) return child as XmlElement;
   }
   return undefined;
 }
 
-function textRuns(element: Element) {
+function textRuns(element: XmlElement) {
   return descendants(element, 't').map((node) => node.textContent ?? '').join('');
 }
 
@@ -150,7 +156,7 @@ function decodeSharedStrings(xml: string | undefined) {
   return descendants(document, 'si').map((item) => textRuns(item));
 }
 
-function decodeCell(cell: Element, sharedStrings: string[]): StructuralCell {
+function decodeCell(cell: XmlElement, sharedStrings: string[]): StructuralCell {
   const ref = cell.getAttribute('r')?.toUpperCase() ?? '';
   const { column, row } = columnFromRef(ref);
   const type = cell.getAttribute('t');
@@ -248,8 +254,8 @@ async function safeZipParts(buffer: Buffer) {
     entries.set(memberPath, entry);
 
     if (entry.type === 'Directory' || memberPath.endsWith('/')) continue;
-    const uncompressed = Number(entry.vars.uncompressedSize);
-    const compressed = Number(entry.vars.compressedSize);
+    const uncompressed = Number(entry.uncompressedSize);
+    const compressed = Number(entry.compressedSize);
     if (!Number.isSafeInteger(uncompressed) || uncompressed < 0 || !Number.isSafeInteger(compressed) || compressed < 0) {
       throw new Error(`Official STEO XLSX member ${memberPath} has invalid ZIP size metadata`);
     }
@@ -290,7 +296,7 @@ function resolveRequiredSheetParts(workbookXml: string, relationshipsXml: string
   const workbook = parseXml(workbookXml, 'workbook.xml');
   const relationships = parseXml(relationshipsXml, 'workbook relationships');
 
-  const relationshipById = new Map<string, Element>();
+  const relationshipById = new Map<string, XmlElement>();
   for (const relationship of descendants(relationships, 'Relationship')) {
     const id = relationship.getAttribute('Id') ?? '';
     if (!id) continue;
