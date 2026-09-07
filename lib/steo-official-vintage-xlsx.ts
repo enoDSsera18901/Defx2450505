@@ -7,6 +7,11 @@ import { parseOfficialSteoVintage, type OfficialSteoVintage } from './steo-offic
 const MAX_OFFICIAL_STEO_XLSX_BYTES = 15 * 1024 * 1024;
 const OFFICIAL_ARCHIVE_URL = /^https:\/\/www\.eia\.gov\/outlooks\/steo\/archives\/[a-z]{3}\d{2}_base\.xlsx$/;
 
+export type FetchedOfficialSteoVintage = {
+  vintage: OfficialSteoVintage;
+  sourceBytes: Buffer;
+};
+
 function assertOfficialArchiveUrl(url: string) {
   if (!OFFICIAL_ARCHIVE_URL.test(url)) throw new Error('Refusing non-canonical official EIA STEO archive URL');
 }
@@ -40,10 +45,10 @@ async function parseWorkbookBuffer(
   });
 }
 
-export async function fetchOfficialSteoVintage(
+export async function fetchOfficialSteoVintageWithSource(
   entry: OfficialSteoArchiveEntry,
   importedAt = new Date().toISOString(),
-): Promise<OfficialSteoVintage> {
+): Promise<FetchedOfficialSteoVintage> {
   assertOfficialArchiveUrl(entry.sourceArtifactUrl);
   const response = await fetch(entry.sourceArtifactUrl, {
     headers: { 'user-agent': 'LastBarrel/0.1 public-EIA-vintage-import' },
@@ -54,8 +59,16 @@ export async function fetchOfficialSteoVintage(
   if (Number.isFinite(declaredLength) && declaredLength > MAX_OFFICIAL_STEO_XLSX_BYTES) {
     throw new Error('Official EIA STEO archive workbook exceeds the 15 MiB safety limit');
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return parseWorkbookBuffer(buffer, entry, importedAt);
+  const sourceBytes = Buffer.from(await response.arrayBuffer());
+  const vintage = await parseWorkbookBuffer(sourceBytes, entry, importedAt);
+  return { vintage, sourceBytes };
+}
+
+export async function fetchOfficialSteoVintage(
+  entry: OfficialSteoArchiveEntry,
+  importedAt = new Date().toISOString(),
+): Promise<OfficialSteoVintage> {
+  return (await fetchOfficialSteoVintageWithSource(entry, importedAt)).vintage;
 }
 
 export async function readOfficialSteoVintageWorkbook(
