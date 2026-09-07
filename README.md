@@ -1,5 +1,7 @@
 # LastBarrel
 
+> **Repository role — canonical LastBarrel application and release surface.** Product UI, public-source adapters, scenario workflows, deployment evidence and release claims are tracked here. `enoDSsera18901/LB234223` is a supporting Python evidence-kernel/research repository for narrow point-in-time and workbook-integrity primitives; work in that kernel is not a shipped LastBarrel capability until it is explicitly adopted and verified here. Avoid implementing product features independently in both repositories.
+
 Oil-market intelligence dashboard inspired by the LastDrop interaction pattern.
 
 ## Current milestone
