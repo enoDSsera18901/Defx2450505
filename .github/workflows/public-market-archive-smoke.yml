@@ -1,0 +1,70 @@
+name: Public market archive smoke
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archive-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Capture the same live public source state twice
+        run: |
+          rm -rf /tmp/public-market-snapshots
+          npx tsx scripts/capture-public-market-snapshot.ts /tmp/public-market-snapshots > /tmp/public-capture-1.json
+          npx tsx scripts/capture-public-market-snapshot.ts /tmp/public-market-snapshots > /tmp/public-capture-2.json
+      - name: Verify live archive identity and idempotency
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const fail = (message) => { throw new Error(message); };
+          const first = JSON.parse(fs.readFileSync('/tmp/public-capture-1.json', 'utf8'));
+          const second = JSON.parse(fs.readFileSync('/tmp/public-capture-2.json', 'utf8'));
+          if (first.status !== 'captured-new-source-state' || first.created !== true) fail(`Unexpected first capture result: ${JSON.stringify(first)}`);
+          if (second.status !== 'source-state-already-present' || second.created !== false) fail(`Second capture was not idempotent: ${JSON.stringify(second)}`);
+          if (first.sourceFingerprint !== second.sourceFingerprint) fail('Immediate repeat capture changed source fingerprint');
+          if (!/^[a-f0-9]{64}$/.test(first.sourceFingerprint ?? '')) fail('Source fingerprint is missing or malformed');
+          if (first.archiveSourceStates !== 1 || second.archiveSourceStates !== 1) fail('Immediate repeat capture created more than one source state');
+          if (first.brentPeriods < 1 || first.wtiPeriods < 1 || first.inventoryPeriods < 2) fail('Captured source series are incomplete');
+          if (!/^[a-f0-9]{64}$/.test(first.steoRevisionFingerprint ?? '')) fail('Linked live STEO revision fingerprint is missing');
+          if (!first.steoNearTermPeriod) fail('Linked near-term STEO period is missing');
+
+          const files = fs.readdirSync('/tmp/public-market-snapshots').filter((name) => name.endsWith('.json'));
+          if (files.length !== 1) fail(`Expected exactly one archived source-state file, got ${files.length}`);
+          if (files[0] !== `${first.sourceFingerprint}.json`) fail('Snapshot filename is not bound to source fingerprint');
+          const snapshot = JSON.parse(fs.readFileSync(path.join('/tmp/public-market-snapshots', files[0]), 'utf8'));
+          if (snapshot.sourceFingerprint !== first.sourceFingerprint) fail('Stored source fingerprint differs from capture report');
+          if (snapshot.seriesIds?.brent !== 'RBRTE' || snapshot.seriesIds?.wti !== 'RWTC' || snapshot.seriesIds?.inventories !== 'WCESTUS1') fail('Stored public series identities are wrong');
+          if (snapshot.steo?.seriesIds?.supply !== 'PAPR_WORLD' || snapshot.steo?.seriesIds?.demand !== 'PATC_WORLD') fail('Stored STEO series identities are wrong');
+          if (snapshot.steo?.nearTermPoint?.classification !== 'forecast') fail('Stored STEO point lost forecast classification');
+          if (snapshot.publicSnapshot?.method !== 'eia-public-derived-snapshot-v1') fail('Stored derived snapshot method is wrong');
+          if (snapshot.publicEvidenceManifest?.method !== 'lastbarrel-public-evidence-manifest-v1') fail('Stored evidence manifest method is wrong');
+          if (snapshot.publicEvidenceManifest?.integrity?.steoRevisionFingerprint !== snapshot.steo?.revisionFingerprint) fail('Stored evidence manifest and STEO revision identity disagree');
+          const unavailable = (snapshot.publicEvidenceManifest?.observations ?? []).filter((item) => item.classification === 'unavailable').map((item) => item.evidenceId).sort();
+          const expectedUnavailable = ['unavailable:commercial-physical-flow','unavailable:dubai-price','unavailable:live-landed-cost','unavailable:murban-price'];
+          if (JSON.stringify(unavailable) !== JSON.stringify(expectedUnavailable)) fail(`Unexpected stored unavailable evidence set: ${JSON.stringify(unavailable)}`);
+          console.log(JSON.stringify({ first, second, snapshotFile: files[0] }, null, 2));
+          NODE
+      - name: Re-validate stored snapshot through repository reader
+        run: |
+          snapshot=$(find /tmp/public-market-snapshots -maxdepth 1 -name '*.json' -type f | head -n 1)
+          npx tsx -e "import { readPublicMarketArchiveSnapshot } from './lib/public-market-snapshot-store'; const s=readPublicMarketArchiveSnapshot(process.argv[1]); console.log(JSON.stringify({fingerprint:s.sourceFingerprint,retrievedAt:s.retrievedAt},null,2));" "$snapshot"
+      - name: Preserve verified live source-state artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-market-source-state
+          path: /tmp/public-market-snapshots/*.json
+          if-no-files-found: error
+          retention-days: 3
