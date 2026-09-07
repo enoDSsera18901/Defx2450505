@@ -6,12 +6,27 @@ import {
   writePublicMarketArchiveSnapshot,
 } from '../lib/public-market-snapshot-store';
 
+const STEO_URL = 'https://www.eia.gov/outlooks/steo/' as const;
+const STEO_SERIES = { supply: 'PAPR_WORLD', demand: 'PATC_WORLD' } as const;
+
 async function main() {
   const directory = path.resolve(process.argv[2] ?? 'data/public-market-snapshots');
   const market = await getEiaMarketData();
   const nearTerm = market.globalBalance?.forecast
     ? [...market.globalBalance.forecast].sort((a, b) => a.period.localeCompare(b.period))[0] ?? null
     : null;
+
+  if (market.globalBalance) {
+    if (market.globalBalance.sourceUrl !== STEO_URL) {
+      throw new Error(`Refusing public archive capture: unexpected STEO source URL ${market.globalBalance.sourceUrl}`);
+    }
+    if (
+      market.globalBalance.seriesIds?.supply !== STEO_SERIES.supply
+      || market.globalBalance.seriesIds?.demand !== STEO_SERIES.demand
+    ) {
+      throw new Error('Refusing public archive capture: unexpected STEO source series identity');
+    }
+  }
 
   const snapshot = createPublicMarketArchiveSnapshot({
     retrievedAt: market.observedAt,
@@ -21,9 +36,9 @@ async function main() {
     publicEvidenceManifest: market.publicEvidenceManifest,
     steo: market.globalBalance && nearTerm
       ? {
-          sourceUrl: market.globalBalance.sourceUrl,
+          sourceUrl: STEO_URL,
           revisionFingerprint: market.globalBalance.revisionFingerprint,
-          seriesIds: market.globalBalance.seriesIds,
+          seriesIds: STEO_SERIES,
           nearTermPoint: nearTerm,
         }
       : null,
