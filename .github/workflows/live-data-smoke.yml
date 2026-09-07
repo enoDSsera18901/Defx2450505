@@ -100,6 +100,10 @@ jobs:
           grep -F "Landed cost scenario lab" /tmp/scenarios.html
           grep -F "NOT LIVE PHYSICAL DATA" /tmp/scenarios.html
           grep -F "No default freight, fees or insurance values are preloaded" /tmp/scenarios.html
+          grep -F "ANALYST STRESS · SCENARIO ONLY" /tmp/scenarios.html
+          grep -F "One-at-a-time sensitivity" /tmp/scenarios.html
+          grep -F "EVIDENCE CHAIN" /tmp/scenarios.html
+          grep -F "Why this total exists" /tmp/scenarios.html
       - name: Show server log on failure
         if: failure()
         run: cat /tmp/lastbarrel.log || true
