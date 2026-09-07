@@ -1,6 +1,5 @@
 import type {
   CargoObservation,
-  EvidenceClass,
   FreightObservation,
   PortEvent,
   RouteEstimate,
@@ -362,8 +361,4 @@ export function resolveFreightObservationReferences(
       ? resolvePhysicalReference(catalog, 'location', freight.destination, sourceIds, asOf)
       : null,
   };
-}
-
-export function resolvedReferenceEvidenceClass(resolution: PhysicalReferenceResolution): EvidenceClass {
-  return resolution.status === 'resolved' ? 'derived' : 'unavailable';
 }
