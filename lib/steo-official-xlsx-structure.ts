@@ -27,7 +27,7 @@ export type OfficialSteoMappedPeriodLineage = {
 export type OfficialSteoWorkbookLineage = {
   schemaVersion: 1;
   relationshipPolicy: 'required-sheets-must-use-safe-internal-worksheet-relationships-v1';
-  formulaPolicy: 'mapped-cells-must-not-be-formula-backed-v1';
+  formulaPolicy: 'mapped-cells-reject-formulas-except-Dates-D7-with-redundant-boundary-crosscheck-v1';
   archiveLimits: typeof OFFICIAL_STEO_XLSX_STRUCTURE_LIMITS;
   sheets: {
     Dates: string;
@@ -37,6 +37,7 @@ export type OfficialSteoWorkbookLineage = {
     issueCell: 'Dates!D1';
     modelingCompletedCell: 'Dates!D2';
     historicalThroughCell: 'Dates!D7';
+    historicalThroughFormula: string | null;
   };
   periods: OfficialSteoMappedPeriodLineage[];
 };
@@ -47,7 +48,7 @@ type StructuralCell = {
   column: string;
   type: string | null;
   value: string | number | boolean | null;
-  hasFormula: boolean;
+  formula: string | null;
 };
 
 type StructuralSheet = {
@@ -160,7 +161,8 @@ function decodeCell(cell: XmlElement, sharedStrings: string[]): StructuralCell {
   const ref = cell.getAttribute('r')?.toUpperCase() ?? '';
   const { column, row } = columnFromRef(ref);
   const type = cell.getAttribute('t');
-  const formula = directChild(cell, 'f');
+  const formulaNode = directChild(cell, 'f');
+  const formula = formulaNode ? (formulaNode.textContent ?? '').trim() : null;
   const rawValue = directChild(cell, 'v')?.textContent ?? null;
   let value: StructuralCell['value'] = null;
 
@@ -183,7 +185,7 @@ function decodeCell(cell: XmlElement, sharedStrings: string[]): StructuralCell {
     value = Number.isFinite(numeric) ? numeric : rawValue;
   }
 
-  return { ref, row, column, type, value, hasFormula: Boolean(formula) };
+  return { ref, row, column, type, value, formula };
 }
 
 function parseSheet(name: (typeof REQUIRED_SHEETS)[number], part: string, xml: string, sharedStrings: string[]): StructuralSheet {
@@ -197,23 +199,23 @@ function parseSheet(name: (typeof REQUIRED_SHEETS)[number], part: string, xml: s
   return { name, part, cells };
 }
 
-function requiredCell(sheet: StructuralSheet, ref: string) {
+function requiredCell(sheet: StructuralSheet, ref: string, allowFormula = false) {
   const cell = sheet.cells.get(ref);
   if (!cell) throw new Error(`Official STEO XLSX is missing mapped cell ${sheet.name}!${ref}`);
-  if (cell.hasFormula) {
+  if (cell.formula !== null && !allowFormula) {
     throw new Error(`Official STEO XLSX mapped cell ${sheet.name}!${ref} is formula-backed; cached formula values are not accepted`);
   }
   return cell;
 }
 
-function requirePresent(sheet: StructuralSheet, ref: string) {
-  const cell = requiredCell(sheet, ref);
+function requirePresent(sheet: StructuralSheet, ref: string, allowFormula = false) {
+  const cell = requiredCell(sheet, ref, allowFormula);
   if (cell.value === null || cell.value === '') throw new Error(`Official STEO XLSX mapped cell ${sheet.name}!${ref} is empty`);
   return cell;
 }
 
-function requireNumeric(sheet: StructuralSheet, ref: string) {
-  const cell = requirePresent(sheet, ref);
+function requireNumeric(sheet: StructuralSheet, ref: string, allowFormula = false) {
+  const cell = requirePresent(sheet, ref, allowFormula);
   const numeric = typeof cell.value === 'number' ? cell.value : Number(String(cell.value).trim());
   if (!Number.isFinite(numeric)) throw new Error(`Official STEO XLSX mapped cell ${sheet.name}!${ref} must be numeric`);
   return cell;
@@ -361,7 +363,12 @@ export function buildOfficialSteoWorkbookLineage(
   const balance = structure.sheets['3atab'];
   requirePresent(dates, 'D1');
   requirePresent(dates, 'D2');
-  requirePresent(dates, 'D7');
+  const historicalThroughCell = requireNumeric(dates, 'D7', true);
+  const cachedHistoricalThrough = String(Math.trunc(Number(historicalThroughCell.value))).padStart(6, '0');
+  const acceptedHistoricalThrough = vintage.historicalThroughPeriod.replace('-', '');
+  if (cachedHistoricalThrough !== acceptedHistoricalThrough) {
+    throw new Error('Official STEO XLSX Dates!D7 cached value does not match the independently validated historical flag boundary');
+  }
 
   const supplyRows = findSeriesRows(balance, 'PAPR_WORLD');
   const demandRows = findSeriesRows(balance, 'PATC_WORLD');
@@ -393,13 +400,14 @@ export function buildOfficialSteoWorkbookLineage(
   return {
     schemaVersion: 1,
     relationshipPolicy: 'required-sheets-must-use-safe-internal-worksheet-relationships-v1',
-    formulaPolicy: 'mapped-cells-must-not-be-formula-backed-v1',
+    formulaPolicy: 'mapped-cells-reject-formulas-except-Dates-D7-with-redundant-boundary-crosscheck-v1',
     archiveLimits: OFFICIAL_STEO_XLSX_STRUCTURE_LIMITS,
     sheets: { Dates: dates.part, '3atab': balance.part },
     metadata: {
       issueCell: 'Dates!D1',
       modelingCompletedCell: 'Dates!D2',
       historicalThroughCell: 'Dates!D7',
+      historicalThroughFormula: historicalThroughCell.formula,
     },
     periods,
   };
