@@ -4,6 +4,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 1 * * *'
 
 permissions:
   contents: read
@@ -61,10 +63,48 @@ jobs:
         run: |
           snapshot=$(find /tmp/public-market-snapshots -maxdepth 1 -name '*.json' -type f | head -n 1)
           npx tsx -e "import { readPublicMarketArchiveSnapshot } from './lib/public-market-snapshot-store'; const s=readPublicMarketArchiveSnapshot(process.argv[1]); console.log(JSON.stringify({fingerprint:s.sourceFingerprint,retrievedAt:s.retrievedAt},null,2));" "$snapshot"
+      - name: Assess live source state against committed archive
+        run: |
+          snapshot=$(find /tmp/public-market-snapshots -maxdepth 1 -name '*.json' -type f | head -n 1)
+          npm run --silent public:watch -- "$snapshot" data/public-market-snapshots > /tmp/public-watch.json
+          cat /tmp/public-watch.json
+      - name: Summarize source-state watch
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const p = JSON.parse(fs.readFileSync('/tmp/public-watch.json', 'utf8'));
+          const lines = [
+            '### Public EIA source-state watch',
+            '',
+            `- Status: **${p.status}**`,
+            `- Candidate fingerprint: \`${p.candidate?.sourceFingerprint ?? 'missing'}\``,
+            `- Committed source states: ${p.committedArchive?.stateCount ?? 'unknown'}`,
+            `- Action required: ${p.actionRequired ? `**yes — ${p.action}**` : 'no'}`,
+          ];
+          if (p.comparison) {
+            lines.push(`- Source observation changes: ${p.comparison.sourceChangeSummary?.total ?? 'unknown'}`);
+            lines.push(`- Added / removed / revised: ${p.comparison.sourceChangeSummary?.added ?? 0} / ${p.comparison.sourceChangeSummary?.removed ?? 0} / ${p.comparison.sourceChangeSummary?.revised ?? 0}`);
+            lines.push(`- STEO comparability: ${p.comparison.steo?.comparability ?? 'unknown'}`);
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+          NODE
       - name: Preserve verified live source-state artifact
         uses: actions/upload-artifact@v4
         with:
           name: public-market-source-state
-          path: /tmp/public-market-snapshots/*.json
+          path: |
+            /tmp/public-market-snapshots/*.json
+            /tmp/public-watch.json
           if-no-files-found: error
           retention-days: 3
+      - name: Require review when scheduled or manual watch detects action
+        if: github.event_name != 'pull_request'
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const p = JSON.parse(fs.readFileSync('/tmp/public-watch.json', 'utf8'));
+          if (p.actionRequired) {
+            throw new Error(`Public source-state watch requires review: ${p.status} (${p.action}). Retrieve the preserved artifact; do not auto-commit it.`);
+          }
+          console.log('Public source-state fingerprint is unchanged; no archive action required.');
+          NODE
