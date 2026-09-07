@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import type { PublicMarketSnapshot } from '../lib/public-market-snapshot';
 
 const gradeDefinitions = [
   { name: 'Brent', series: 'brent', note: 'North Sea benchmark' },
@@ -42,6 +43,7 @@ export default function Home() {
     return { ...grade, price: `$${latest.value.toFixed(2)}`, move, badge: 'LIVE', detail: `${grade.note} · EIA ${latest.period}` };
   }), [market]);
 
+  const snapshot = market?.publicSnapshot as PublicMarketSnapshot | undefined;
   const forecast = (market?.globalBalance?.forecast ?? []) as BalancePoint[];
   const nearTerm = forecast[0] ?? null;
   const chartPoints = forecast.slice(0, 5);
@@ -111,6 +113,31 @@ export default function Home() {
               <div className="spark">{grade.badge === 'LIVE' ? '▁▂▂▃▄▃▅▆▅▇' : '──────────'}</div>
             </article>
           ))}
+        </section>
+
+        <section className="card" style={{ marginBottom: 18 }}>
+          <div className="sectionHead">
+            <div><p className="eyebrow">PUBLIC-DATA SNAPSHOT</p><h2>Derived EIA market measures</h2></div>
+            <span className="status">DESCRIPTIVE</span>
+          </div>
+          <div className="supplyRows">
+            <div>
+              <span>Brent–WTI spread</span>
+              <strong>{snapshot?.brentWtiSpread ? `${snapshot.brentWtiSpread.spreadUsdBbl >= 0 ? '+' : ''}${snapshot.brentWtiSpread.spreadUsdBbl.toFixed(2)}` : '—'}</strong>
+              <small>{snapshot?.brentWtiSpread ? `USD/bbl · ${snapshot.brentWtiSpread.period}` : 'Requires a common EIA monthly period'}</small>
+            </div>
+            <div>
+              <span>U.S. crude inventory change</span>
+              <strong>{snapshot?.inventoryChange ? `${snapshot.inventoryChange.deltaThousandBarrels >= 0 ? '+' : ''}${(snapshot.inventoryChange.deltaThousandBarrels / 1000).toFixed(2)}` : '—'}</strong>
+              <small>{snapshot?.inventoryChange ? `million bbl · week to ${snapshot.inventoryChange.latestPeriod}` : 'Requires two distinct EIA weekly observations'}</small>
+            </div>
+            <div>
+              <span>Near-term implied balance</span>
+              <strong>{snapshot?.nearTermBalance ? `${snapshot.nearTermBalance.balanceMbpd >= 0 ? '+' : ''}${snapshot.nearTermBalance.balanceMbpd.toFixed(2)}` : '—'}</strong>
+              <small>{snapshot?.nearTermBalance ? `m b/d · ${snapshot.nearTermBalance.period} STEO forecast` : 'No paired STEO forecast available'}</small>
+            </div>
+          </div>
+          <div className="forecastCallout"><strong>Descriptive only:</strong> arithmetic derived from public EIA observations plus an explicitly labelled STEO forecast. <span>No bullish/bearish score and no causal interpretation.</span></div>
         </section>
 
         <section className="twoCol">
