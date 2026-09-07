@@ -91,6 +91,7 @@ export default function ScenarioLabPage() {
       .then((response) => response.json())
       .then((payload) => {
         if (payload?.status === 'live' && payload?.data) {
+          resetOutputs();
           setMarket(payload.data as MarketPayload);
           setFeedState('live');
         } else {
