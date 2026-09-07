@@ -1,44 +1,79 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { buildPublicEvidenceManifest } from '../lib/public-evidence-manifest';
 import { buildPublicEiaBrief, type PublicEiaBriefMarket } from '../lib/public-eia-brief';
 import type { SteoRevisionIntelligence } from '../lib/steo-revision-intelligence';
+import type { SteoBalancePoint } from '../lib/steo';
+
+const observedAt = '2026-09-07T03:00:00.000Z';
+const fingerprint = 'b'.repeat(64);
+const brent = [{ period: '2026-08', value: 72.5, units: 'USD/bbl' }];
+const wti = [{ period: '2026-08', value: 69.25, units: 'USD/bbl' }];
+const inventories = [
+  { period: '2026-09-04', value: 420000, units: 'thousand barrels' },
+  { period: '2026-08-28', value: 417500, units: 'thousand barrels' },
+];
+const steoForecast: SteoBalancePoint[] = [
+  {
+    period: '2026-09',
+    supplyMbpd: 105.9,
+    demandMbpd: 105.7,
+    balanceMbpd: 0.2,
+    classification: 'forecast',
+  },
+];
+
+const publicSnapshot = {
+  method: 'eia-public-derived-snapshot-v1' as const,
+  brentWtiSpread: {
+    period: '2026-08',
+    brentUsdBbl: 72.5,
+    wtiUsdBbl: 69.25,
+    spreadUsdBbl: 3.25,
+    classification: 'derived-public-price-observation' as const,
+  },
+  inventoryChange: {
+    latestPeriod: '2026-09-04',
+    previousPeriod: '2026-08-28',
+    latestThousandBarrels: 420000,
+    previousThousandBarrels: 417500,
+    deltaThousandBarrels: 2500,
+    deltaPct: 0.5988,
+    classification: 'derived-public-inventory-observation' as const,
+  },
+  nearTermBalance: {
+    period: '2026-09',
+    supplyMbpd: 105.9,
+    demandMbpd: 105.7,
+    balanceMbpd: 0.2,
+    classification: 'forecast' as const,
+  },
+  limitations: ['These metrics are descriptive and are not combined into a bullish/bearish score or used to infer market causality.'],
+};
+
+const publicEvidenceManifest = buildPublicEvidenceManifest({
+  generatedAt: observedAt,
+  retrievedAt: observedAt,
+  brent,
+  wti,
+  inventories,
+  snapshot: publicSnapshot,
+  steo: {
+    sourceUrl: 'https://www.eia.gov/outlooks/steo/',
+    revisionFingerprint: fingerprint,
+    seriesIds: { supply: 'PAPR_WORLD', demand: 'PATC_WORLD' },
+    forecast: steoForecast,
+  },
+});
 
 const market: PublicEiaBriefMarket = {
   source: 'U.S. Energy Information Administration (EIA) API',
   sourceUrl: 'https://www.eia.gov/opendata/',
-  observedAt: '2026-09-07T03:00:00.000Z',
+  observedAt,
   freshnessLabel: '48h since latest inventory observation',
-  prices: {
-    brent: [{ period: '2026-08', value: 72.5 }],
-    wti: [{ period: '2026-08', value: 69.25 }],
-  },
-  publicSnapshot: {
-    method: 'eia-public-derived-snapshot-v1',
-    brentWtiSpread: {
-      period: '2026-08',
-      brentUsdBbl: 72.5,
-      wtiUsdBbl: 69.25,
-      spreadUsdBbl: 3.25,
-      classification: 'derived-public-price-observation',
-    },
-    inventoryChange: {
-      latestPeriod: '2026-09-04',
-      previousPeriod: '2026-08-28',
-      latestThousandBarrels: 420000,
-      previousThousandBarrels: 417500,
-      deltaThousandBarrels: 2500,
-      deltaPct: 0.5988,
-      classification: 'derived-public-inventory-observation',
-    },
-    nearTermBalance: {
-      period: '2026-09',
-      supplyMbpd: 105.9,
-      demandMbpd: 105.7,
-      balanceMbpd: 0.2,
-      classification: 'forecast',
-    },
-    limitations: ['These metrics are descriptive and are not combined into a bullish/bearish score or used to infer market causality.'],
-  },
+  prices: { brent, wti },
+  publicSnapshot,
+  publicEvidenceManifest,
 };
 
 const revisions: SteoRevisionIntelligence = {
@@ -88,7 +123,7 @@ const revisions: SteoRevisionIntelligence = {
   limitations: ['descriptive'],
 };
 
-test('builds a portable public-only evidence brief with explicit classifications and gaps', () => {
+test('builds a portable public-only evidence brief with explicit classifications, lineage and gaps', () => {
   const brief = buildPublicEiaBrief({
     generatedAt: '2026-09-07T03:15:00.000Z',
     market,
@@ -99,6 +134,11 @@ test('builds a portable public-only evidence brief with explicit classifications
   assert.match(brief, /Brent–WTI spread: \+3\.25 USD\/bbl \(2026-08, derived from same-period public observations\)/);
   assert.match(brief, /U\.S\. crude inventory change: \+2\.50 million bbl/);
   assert.match(brief, /Near-term implied world balance: \+0\.20 m b\/d \(2026-09, EIA STEO forecast\)/);
+  assert.match(brief, /## Evidence lineage/);
+  assert.match(brief, /derived:brent-wti-spread:2026-08/);
+  assert.match(brief, /inputs eia:RBRTE:2026-08, eia:RWTC:2026-08/);
+  assert.match(brief, /derived:inventory-change:2026-08-28:2026-09-04/);
+  assert.match(brief, /forecast-derived:world-balance:2026-09/);
   assert.match(brief, /8 official vintages, 2026-01 → 2026-08/);
   assert.match(brief, /2026-12: balance \+0\.30 m b\/d; supply \+0\.20; demand -0\.10/);
   assert.match(brief, /Live cargo identity, volumes, destination\/ETA, commitments and freight remain unavailable/);
@@ -107,17 +147,29 @@ test('builds a portable public-only evidence brief with explicit classifications
 });
 
 test('keeps unavailable public components explicit rather than inserting substitute values', () => {
+  const emptySnapshot = {
+    ...market.publicSnapshot,
+    brentWtiSpread: null,
+    inventoryChange: null,
+    nearTermBalance: null,
+  };
+  const emptyManifest = buildPublicEvidenceManifest({
+    generatedAt: observedAt,
+    retrievedAt: observedAt,
+    brent: [],
+    wti: [],
+    inventories: [],
+    snapshot: emptySnapshot,
+    steo: null,
+  });
+
   const brief = buildPublicEiaBrief({
     generatedAt: '2026-09-07T03:15:00.000Z',
     market: {
       ...market,
       prices: { brent: [], wti: [] },
-      publicSnapshot: {
-        ...market.publicSnapshot,
-        brentWtiSpread: null,
-        inventoryChange: null,
-        nearTermBalance: null,
-      },
+      publicSnapshot: emptySnapshot,
+      publicEvidenceManifest: emptyManifest,
     },
     revisions: null,
   });
@@ -127,10 +179,11 @@ test('keeps unavailable public components explicit rather than inserting substit
   assert.match(brief, /Brent–WTI spread: unavailable/);
   assert.match(brief, /U\.S\. crude inventory change: unavailable/);
   assert.match(brief, /Near-term implied world balance: unavailable/);
+  assert.match(brief, /Brent-WTI spread: no derived evidence ID/);
   assert.match(brief, /Official STEO revision archive: unavailable/);
 });
 
-test('rejects malformed provenance timestamps instead of producing a misleading brief', () => {
+test('rejects malformed provenance timestamps or missing manifest instead of producing a misleading brief', () => {
   assert.throws(
     () => buildPublicEiaBrief({ generatedAt: 'not-a-date', market, revisions }),
     /generatedAt/,
@@ -139,5 +192,14 @@ test('rejects malformed provenance timestamps instead of producing a misleading 
   assert.throws(
     () => buildPublicEiaBrief({ generatedAt: '2026-09-07T03:15:00.000Z', market: { ...market, observedAt: 'bad-date' }, revisions }),
     /observedAt/,
+  );
+
+  assert.throws(
+    () => buildPublicEiaBrief({
+      generatedAt: '2026-09-07T03:15:00.000Z',
+      market: { ...market, publicEvidenceManifest: undefined as never },
+      revisions,
+    }),
+    /valid public evidence manifest/,
   );
 });
