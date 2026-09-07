@@ -1,16 +1,29 @@
 import { type PhysicalObservation, validatePhysicalObservation } from './physical-data';
 import { assessObservationFreshness, type FreshnessStatus, type ObservationKind } from './physical-provider';
+import {
+  resolveCargoObservationReferences,
+  resolveFreightObservationReferences,
+  resolvePortEventReference,
+  resolveRouteEstimateReferences,
+  validatePhysicalReferenceCatalog,
+  type PhysicalReferenceCatalog,
+  type PhysicalReferenceKind,
+  type PhysicalReferenceResolution,
+} from './physical-reference';
 
 export type ProviderTrialDataset = {
   providerId: string;
   capturedAt: string;
   freshnessThresholdHours: Record<ObservationKind, number>;
+  referenceCatalog: PhysicalReferenceCatalog;
   records: PhysicalObservation[];
 };
 
 export type TrialEvidenceCheck = {
   id:
     | 'valid_canonical_records'
+    | 'reference_catalog'
+    | 'reference_resolution_complete'
     | 'sample_size'
     | 'completed_voyage'
     | 'missing_or_ambiguous_destination'
@@ -19,6 +32,40 @@ export type TrialEvidenceCheck = {
     | 'freight_observation';
   pass: boolean;
   detail: string;
+};
+
+export type ReferenceResolutionIssue = {
+  recordKind: ObservationKind;
+  recordId: string;
+  field: string;
+  rawValue: string;
+  referenceKind: PhysicalReferenceKind;
+  status: 'ambiguous' | 'unresolved';
+  candidateIds: string[];
+  sourceRecordIds: string[];
+  reason: string;
+};
+
+export type ReferenceResolutionCoverage = {
+  present: number;
+  resolved: number;
+  ambiguous: number;
+  unresolved: number;
+};
+
+export type ProviderTrialReferenceResolution = {
+  catalogAvailable: boolean;
+  catalogValid: boolean;
+  catalogErrors: string[];
+  fieldsPresent: number;
+  resolved: number;
+  ambiguous: number;
+  unresolved: number;
+  resolvedPct: number | null;
+  byKind: Record<PhysicalReferenceKind, ReferenceResolutionCoverage>;
+  distinctCanonicalGrades: number;
+  distinctCanonicalRoutes: number;
+  issues: ReferenceResolutionIssue[];
 };
 
 export type ProviderTrialReport = {
@@ -33,12 +80,15 @@ export type ProviderTrialReport = {
     withDestination: number;
     delivered: number;
     missingOrAmbiguousDestination: number;
-    distinctGrades: number;
-    distinctRoutes: number;
+    distinctRawGradeLabels: number;
+    distinctCanonicalGrades: number;
+    distinctRawRoutes: number;
+    distinctCanonicalRoutes: number;
     gradeCoveragePct: number | null;
     quantityCoveragePct: number | null;
     destinationCoveragePct: number | null;
   };
+  referenceResolution: ProviderTrialReferenceResolution;
   freshness: Record<FreshnessStatus, number>;
   checks: TrialEvidenceCheck[];
   errors: string[];
@@ -59,15 +109,85 @@ function cargoDestination(record: Extract<PhysicalObservation, { kind: 'cargo' }
   return record.dischargePort?.value ?? record.destination?.value ?? null;
 }
 
-function cargoRouteKey(record: Extract<PhysicalObservation, { kind: 'cargo' }>): string | null {
+function rawCargoRouteKey(record: Extract<PhysicalObservation, { kind: 'cargo' }>): string | null {
   const origin = record.loadPort?.value;
   const destination = cargoDestination(record);
   if (!nonEmpty(origin) || !nonEmpty(destination)) return null;
   return `${origin.trim().toLowerCase()}->${destination.trim().toLowerCase()}`;
 }
 
+function emptyResolutionCoverage(): ReferenceResolutionCoverage {
+  return { present: 0, resolved: 0, ambiguous: 0, unresolved: 0 };
+}
+
+function emptyReferenceResolution(catalogAvailable: boolean, catalogErrors: string[]): ProviderTrialReferenceResolution {
+  return {
+    catalogAvailable,
+    catalogValid: catalogAvailable && catalogErrors.length === 0,
+    catalogErrors,
+    fieldsPresent: 0,
+    resolved: 0,
+    ambiguous: 0,
+    unresolved: 0,
+    resolvedPct: null,
+    byKind: {
+      commodity: emptyResolutionCoverage(),
+      grade: emptyResolutionCoverage(),
+      location: emptyResolutionCoverage(),
+    },
+    distinctCanonicalGrades: 0,
+    distinctCanonicalRoutes: 0,
+    issues: [],
+  };
+}
+
+function trackResolution(
+  summary: ProviderTrialReferenceResolution,
+  resolution: PhysicalReferenceResolution | null,
+  recordKind: ObservationKind,
+  recordId: string,
+  field: string,
+) {
+  if (!resolution) return;
+
+  summary.fieldsPresent += 1;
+  summary.byKind[resolution.kind].present += 1;
+
+  if (resolution.status === 'resolved') {
+    summary.resolved += 1;
+    summary.byKind[resolution.kind].resolved += 1;
+    return;
+  }
+
+  if (resolution.status === 'ambiguous') {
+    summary.ambiguous += 1;
+    summary.byKind[resolution.kind].ambiguous += 1;
+  } else {
+    summary.unresolved += 1;
+    summary.byKind[resolution.kind].unresolved += 1;
+  }
+
+  summary.issues.push({
+    recordKind,
+    recordId,
+    field,
+    rawValue: resolution.rawValue,
+    referenceKind: resolution.kind,
+    status: resolution.status,
+    candidateIds: resolution.status === 'ambiguous' ? resolution.candidateIds : [],
+    sourceRecordIds: resolution.sourceRecordIds,
+    reason: resolution.reason,
+  });
+}
+
 export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
   const errors: string[] = [];
+  const boundaryErrors: string[] = [];
+  const addBoundaryError = (error: string) => {
+    boundaryErrors.push(error);
+    errors.push(error);
+  };
+
   const raw = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
   const providerId = typeof raw.providerId === 'string' ? raw.providerId : '';
   const capturedAt = typeof raw.capturedAt === 'string' ? raw.capturedAt : '';
@@ -77,18 +197,34 @@ export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
       : null;
   const rawRecords = Array.isArray(raw.records) ? raw.records : [];
 
-  if (!nonEmpty(providerId)) errors.push('providerId is required');
-  if (!validIso(capturedAt)) errors.push('capturedAt must be an ISO-compatible timestamp');
+  if (!nonEmpty(providerId)) addBoundaryError('providerId is required');
+  if (!validIso(capturedAt)) addBoundaryError('capturedAt must be an ISO-compatible timestamp');
   if (!rawThresholds) {
-    errors.push('freshnessThresholdHours is required');
+    addBoundaryError('freshnessThresholdHours is required');
   } else {
     for (const kind of KINDS) {
       if (!finitePositive(rawThresholds[kind])) {
-        errors.push(`freshnessThresholdHours.${kind} must be > 0`);
+        addBoundaryError(`freshnessThresholdHours.${kind} must be > 0`);
       }
     }
   }
-  if (!Array.isArray(raw.records)) errors.push('records must be an array');
+  if (!Array.isArray(raw.records)) addBoundaryError('records must be an array');
+
+  const rawCatalog = raw.referenceCatalog;
+  const catalogAvailable = Boolean(rawCatalog && typeof rawCatalog === 'object' && !Array.isArray(rawCatalog));
+  let referenceCatalog: PhysicalReferenceCatalog | null = null;
+  let catalogErrors: string[] = [];
+  if (!catalogAvailable) {
+    catalogErrors = ['referenceCatalog is required'];
+  } else {
+    referenceCatalog = rawCatalog as PhysicalReferenceCatalog;
+    try {
+      catalogErrors = validatePhysicalReferenceCatalog(referenceCatalog);
+    } catch (error) {
+      catalogErrors = [`reference catalog could not be validated: ${error instanceof Error ? error.message : 'unknown error'}`];
+    }
+  }
+  catalogErrors.forEach((error) => errors.push(`referenceCatalog: ${error}`));
 
   const recordCounts: ProviderTrialReport['recordCounts'] = {
     vessel: 0,
@@ -104,13 +240,13 @@ export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
 
   rawRecords.forEach((rawRecord, index) => {
     if (!rawRecord || typeof rawRecord !== 'object') {
-      errors.push(`records[${index}] is not a supported canonical physical observation`);
+      addBoundaryError(`records[${index}] is not a supported canonical physical observation`);
       return;
     }
 
     const candidate = rawRecord as { kind?: unknown; provenance?: unknown };
     if (!supportedKind(candidate.kind)) {
-      errors.push(`records[${index}] is not a supported canonical physical observation`);
+      addBoundaryError(`records[${index}] is not a supported canonical physical observation`);
       return;
     }
 
@@ -121,13 +257,13 @@ export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
 
     const provenance = candidate.provenance;
     if (!provenance || typeof provenance !== 'object' || (provenance as { provider?: unknown }).provider !== providerId) {
-      errors.push(`records[${index}] provider provenance does not match ${providerId}`);
+      addBoundaryError(`records[${index}] provider provenance does not match ${providerId}`);
     }
 
     try {
-      validatePhysicalObservation(record).forEach((error) => errors.push(`records[${index}]: ${error}`));
+      validatePhysicalObservation(record).forEach((error) => addBoundaryError(`records[${index}]: ${error}`));
     } catch (error) {
-      errors.push(`records[${index}] could not be validated: ${error instanceof Error ? error.message : 'unknown error'}`);
+      addBoundaryError(`records[${index}] could not be validated: ${error instanceof Error ? error.message : 'unknown error'}`);
     }
 
     const threshold = rawThresholds?.[record.kind];
@@ -136,7 +272,7 @@ export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
         const assessment = assessObservationFreshness(record, capturedAt, threshold);
         freshness[assessment.status] += 1;
       } catch (error) {
-        errors.push(`records[${index}] freshness could not be assessed: ${error instanceof Error ? error.message : 'unknown error'}`);
+        addBoundaryError(`records[${index}] freshness could not be assessed: ${error instanceof Error ? error.message : 'unknown error'}`);
       }
     }
   });
@@ -155,13 +291,57 @@ export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
   ).length;
   const missingOrAmbiguousDestination = ambiguousCargoes + ambiguousRoutes;
 
-  const grades = new Set(
+  const rawGrades = new Set(
     cargoes
       .map((record) => record.grade?.value)
       .filter(nonEmpty)
       .map((value) => value.trim().toLowerCase()),
   );
-  const routes = new Set(cargoes.map(cargoRouteKey).filter((value): value is string => value !== null));
+  const rawRoutes = new Set(cargoes.map(rawCargoRouteKey).filter((value): value is string => value !== null));
+
+  const referenceResolution = emptyReferenceResolution(catalogAvailable, catalogErrors);
+  const canonicalGrades = new Set<string>();
+  const canonicalRoutes = new Set<string>();
+
+  if (referenceCatalog && catalogErrors.length === 0) {
+    for (const record of records) {
+      if (record.kind === 'cargo') {
+        const resolved = resolveCargoObservationReferences(record, referenceCatalog);
+        trackResolution(referenceResolution, resolved.commodity, 'cargo', record.cargoId, 'commodity');
+        trackResolution(referenceResolution, resolved.grade, 'cargo', record.cargoId, 'grade');
+        trackResolution(referenceResolution, resolved.loadLocation, 'cargo', record.cargoId, 'loadPort');
+        trackResolution(referenceResolution, resolved.destinationLocation, 'cargo', record.cargoId, 'destination');
+        trackResolution(referenceResolution, resolved.dischargeLocation, 'cargo', record.cargoId, 'dischargePort');
+
+        if (resolved.grade?.status === 'resolved') canonicalGrades.add(resolved.grade.canonicalId);
+        const canonicalDestination = record.dischargePort ? resolved.dischargeLocation : resolved.destinationLocation;
+        if (resolved.loadLocation?.status === 'resolved' && canonicalDestination?.status === 'resolved') {
+          canonicalRoutes.add(`${resolved.loadLocation.canonicalId}->${canonicalDestination.canonicalId}`);
+        }
+      }
+
+      if (record.kind === 'route') {
+        const resolved = resolveRouteEstimateReferences(record, referenceCatalog);
+        trackResolution(referenceResolution, resolved.originLocation, 'route', record.routeId, 'origin');
+        trackResolution(referenceResolution, resolved.destinationLocation, 'route', record.routeId, 'destination');
+      }
+
+      if (record.kind === 'port_event') {
+        const resolved = resolvePortEventReference(record, referenceCatalog);
+        trackResolution(referenceResolution, resolved.portLocation, 'port_event', record.eventId, 'port');
+      }
+
+      if (record.kind === 'freight') {
+        const resolved = resolveFreightObservationReferences(record, referenceCatalog);
+        trackResolution(referenceResolution, resolved.originLocation, 'freight', record.freightId, 'origin');
+        trackResolution(referenceResolution, resolved.destinationLocation, 'freight', record.freightId, 'destination');
+      }
+    }
+  }
+
+  referenceResolution.distinctCanonicalGrades = canonicalGrades.size;
+  referenceResolution.distinctCanonicalRoutes = canonicalRoutes.size;
+  referenceResolution.resolvedPct = pct(referenceResolution.resolved, referenceResolution.fieldsPresent);
 
   const cargoCoverage = {
     cargoes: cargoes.length,
@@ -171,18 +351,44 @@ export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
     withDestination,
     delivered,
     missingOrAmbiguousDestination,
-    distinctGrades: grades.size,
-    distinctRoutes: routes.size,
+    distinctRawGradeLabels: rawGrades.size,
+    distinctCanonicalGrades: canonicalGrades.size,
+    distinctRawRoutes: rawRoutes.size,
+    distinctCanonicalRoutes: canonicalRoutes.size,
     gradeCoveragePct: pct(withGrade, cargoes.length),
     quantityCoveragePct: pct(withQuantity, cargoes.length),
     destinationCoveragePct: pct(withDestination, cargoes.length),
   };
 
+  const referenceResolutionComplete =
+    referenceResolution.catalogValid &&
+    referenceResolution.fieldsPresent > 0 &&
+    referenceResolution.ambiguous === 0 &&
+    referenceResolution.unresolved === 0;
+
   const checks: TrialEvidenceCheck[] = [
     {
       id: 'valid_canonical_records',
-      pass: errors.length === 0,
-      detail: errors.length === 0 ? 'All captured records satisfy the canonical/provider boundary.' : `${errors.length} validation error(s) remain.`,
+      pass: boundaryErrors.length === 0,
+      detail:
+        boundaryErrors.length === 0
+          ? 'All captured records satisfy the canonical/provider boundary.'
+          : `${boundaryErrors.length} canonical/provider validation error(s) remain.`,
+    },
+    {
+      id: 'reference_catalog',
+      pass: referenceResolution.catalogValid,
+      detail: referenceResolution.catalogValid
+        ? `${referenceCatalog?.references.length ?? 0} canonical reference(s) available for deterministic resolution.`
+        : `${referenceResolution.catalogErrors.length} reference-catalog validation error(s) remain.`,
+    },
+    {
+      id: 'reference_resolution_complete',
+      pass: referenceResolutionComplete,
+      detail: referenceResolution.catalogValid
+        ? `${referenceResolution.resolved}/${referenceResolution.fieldsPresent} supplied reference field(s) resolved; ` +
+          `${referenceResolution.ambiguous} ambiguous and ${referenceResolution.unresolved} unresolved.`
+        : 'Reference resolution was not run because the canonical catalog is missing or invalid.',
     },
     {
       id: 'sample_size',
@@ -201,13 +407,17 @@ export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
     },
     {
       id: 'multiple_routes',
-      pass: routes.size >= 2,
-      detail: `${routes.size} distinct load-to-destination cargo route(s) captured.`,
+      pass: canonicalRoutes.size >= 2,
+      detail:
+        `${canonicalRoutes.size} distinct canonical load-to-destination route(s) resolved ` +
+        `from ${rawRoutes.size} distinct raw route label pair(s).`,
     },
     {
       id: 'multiple_grades',
-      pass: grades.size >= 2,
-      detail: `${grades.size} distinct observed/estimated cargo grade label(s) captured.`,
+      pass: canonicalGrades.size >= 2,
+      detail:
+        `${canonicalGrades.size} distinct canonical cargo grade(s) resolved ` +
+        `from ${rawGrades.size} distinct raw grade label(s).`,
     },
     {
       id: 'freight_observation',
@@ -221,6 +431,7 @@ export function evaluateProviderTrial(input: unknown): ProviderTrialReport {
     capturedAt,
     recordCounts,
     cargoCoverage,
+    referenceResolution,
     freshness,
     checks,
     errors,
