@@ -31,6 +31,8 @@ jobs:
         run: npm run test:evidence-manifest
       - name: Public market archive tests
         run: npm run test:public-archive
+      - name: Public source-state comparison tests
+        run: npm run test:public-history
       - name: Public EIA brief tests
         run: npm run test:public-brief
       - name: Landed-cost engine tests
@@ -99,6 +101,21 @@ jobs:
           const payload = JSON.parse(fs.readFileSync('/tmp/revisions.json', 'utf8'));
           if (payload.status !== 'available') throw new Error(`Expected available revision intelligence, got ${payload.status}: ${payload.error ?? ''}`);
           if (payload.data?.archive?.vintageCount !== 8) throw new Error(`Expected 8 packaged official vintages, got ${payload.data?.archive?.vintageCount}`);
+          NODE
+          curl --fail --silent --show-error http://127.0.0.1:3000/api/public/history -o /tmp/public-history.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync('/tmp/public-history.json', 'utf8'));
+          if (payload.status !== 'available') throw new Error(`Expected available public history endpoint, got ${payload.status}: ${payload.error ?? ''}`);
+          const states = payload.data?.archive?.sourceStates;
+          if (!Number.isInteger(states) || states < 1) throw new Error(`Expected at least one packaged public source state, got ${states}`);
+          if (!Array.isArray(payload.data?.archive?.fingerprints) || payload.data.archive.fingerprints.length !== states) throw new Error('Public history fingerprint count does not match source-state count');
+          if (states === 1) {
+            if (payload.data?.comparisonStatus !== 'insufficient-history' || payload.data?.comparison !== null) throw new Error('Single-state archive must not manufacture a comparison');
+          } else {
+            if (payload.data?.comparisonStatus !== 'available') throw new Error('Multi-state archive did not expose an available comparison');
+            if (payload.data?.comparison?.method !== 'lastbarrel-public-source-state-comparison-v1') throw new Error('Unexpected public history comparison method');
+          }
           NODE
           curl --fail --silent --show-error http://127.0.0.1:3000/revisions -o /tmp/revisions.html
           grep -F 'What changed between STEO releases?' /tmp/revisions.html
