@@ -101,6 +101,7 @@ test('resolves required worksheets through internal relationships and emits exac
   assert.deepEqual(lineage.periods[0], {
     period: '2026-06',
     periodCell: 'Dates!C11',
+    periodFormula: null,
     historicalFlagCell: 'Dates!C13',
     supplyCells: ['3atab!C2'],
     demandCells: ['3atab!C4'],
@@ -118,7 +119,7 @@ test('accepts a formula-backed Dates!D7 only when its cached value matches the i
   assert.equal(lineage.metadata.historicalThroughFormula, 'MAX(C11:F11*(C13:F13=1))');
   assert.equal(
     lineage.formulaPolicy,
-    'mapped-cells-reject-formulas-except-Dates-D7-with-redundant-boundary-crosscheck-v1',
+    'economic-values-and-flags-reject-formulas;Dates-row11-and-D7-cache-require-independent-crosschecks-v1',
   );
 });
 
@@ -131,6 +132,28 @@ test('rejects a formula-backed Dates!D7 when its cached value disagrees with the
   assert.throws(
     () => buildOfficialSteoWorkbookLineage(structure, semanticVintage()),
     /D7 cached value does not match the independently validated historical flag boundary/,
+  );
+});
+
+test('accepts formula-backed row-11 period caches only when they match the issue-anchored monthly sequence', async () => {
+  const datesXml = DATES_XML.replace(
+    '<c r="C11"><v>202606</v></c>',
+    '<c r="C11"><f>EDATE(E11,-2)</f><v>202606</v></c>',
+  );
+  const structure = await inspectOfficialSteoWorkbookStructure(zipWorkbook({ datesXml }));
+  const lineage = buildOfficialSteoWorkbookLineage(structure, semanticVintage());
+  assert.equal(lineage.periods[0].periodFormula, 'EDATE(E11,-2)');
+});
+
+test('rejects a formula-backed row-11 period cache that breaks the issue-anchored monthly sequence', async () => {
+  const datesXml = DATES_XML.replace(
+    '<c r="C11"><v>202606</v></c>',
+    '<c r="C11"><f>202605</f><v>202605</v></c>',
+  );
+  const structure = await inspectOfficialSteoWorkbookStructure(zipWorkbook({ datesXml }));
+  assert.throws(
+    () => buildOfficialSteoWorkbookLineage(structure, semanticVintage()),
+    /Dates!C11 does not match the issue-anchored monthly period sequence/,
   );
 });
 
