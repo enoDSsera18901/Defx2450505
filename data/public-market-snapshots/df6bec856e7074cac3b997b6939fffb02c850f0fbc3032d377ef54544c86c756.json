@@ -1,0 +1,133 @@
+{
+  "source": "U.S. Energy Information Administration (EIA) API",
+  "sourceUrl": "https://www.eia.gov/opendata/",
+  "retrievedAt": "2026-09-07T03:42:53.832Z",
+  "fingerprintMethod": "sha256 of canonical RBRTE/RWTC/WCESTUS1 observations plus linked STEO revision/near-term point",
+  "seriesIds": {
+    "brent": "RBRTE",
+    "wti": "RWTC",
+    "inventories": "WCESTUS1"
+  },
+  "prices": {
+    "brent": [
+      { "period": "2026-08", "value": 91.08, "units": "$/BBL" },
+      { "period": "2026-07", "value": 83.76, "units": "$/BBL" },
+      { "period": "2026-06", "value": 85.4, "units": "$/BBL" },
+      { "period": "2026-05", "value": 107.14, "units": "$/BBL" },
+      { "period": "2026-04", "value": 117.29, "units": "$/BBL" },
+      { "period": "2026-03", "value": 103.13, "units": "$/BBL" },
+      { "period": "2026-02", "value": 70.89, "units": "$/BBL" },
+      { "period": "2026-01", "value": 66.6, "units": "$/BBL" },
+      { "period": "2025-12", "value": 62.54, "units": "$/BBL" },
+      { "period": "2025-11", "value": 63.8, "units": "$/BBL" },
+      { "period": "2025-10", "value": 64.54, "units": "$/BBL" },
+      { "period": "2025-09", "value": 67.99, "units": "$/BBL" },
+      { "period": "2025-08", "value": 67.87, "units": "$/BBL" }
+    ],
+    "wti": [
+      { "period": "2026-08", "value": 83.9, "units": "$/BBL" },
+      { "period": "2026-07", "value": 80.46, "units": "$/BBL" },
+      { "period": "2026-06", "value": 84.81, "units": "$/BBL" },
+      { "period": "2026-05", "value": 102.13, "units": "$/BBL" },
+      { "period": "2026-04", "value": 100.32, "units": "$/BBL" },
+      { "period": "2026-03", "value": 91.38, "units": "$/BBL" },
+      { "period": "2026-02", "value": 64.51, "units": "$/BBL" },
+      { "period": "2026-01", "value": 60.04, "units": "$/BBL" },
+      { "period": "2025-12", "value": 57.97, "units": "$/BBL" },
+      { "period": "2025-11", "value": 60.06, "units": "$/BBL" },
+      { "period": "2025-10", "value": 60.89, "units": "$/BBL" },
+      { "period": "2025-09", "value": 63.96, "units": "$/BBL" },
+      { "period": "2025-08", "value": 64.86, "units": "$/BBL" }
+    ]
+  },
+  "inventories": [
+    { "period": "2026-08-28", "value": 424460, "units": "MBBL" },
+    { "period": "2026-08-21", "value": 428910, "units": "MBBL" },
+    { "period": "2026-08-14", "value": 428815, "units": "MBBL" },
+    { "period": "2026-08-07", "value": 424410, "units": "MBBL" },
+    { "period": "2026-07-31", "value": 406987, "units": "MBBL" },
+    { "period": "2026-07-24", "value": 404508, "units": "MBBL" },
+    { "period": "2026-07-17", "value": 411675, "units": "MBBL" },
+    { "period": "2026-07-10", "value": 409665, "units": "MBBL" },
+    { "period": "2026-07-03", "value": 411357, "units": "MBBL" },
+    { "period": "2026-06-26", "value": 408359, "units": "MBBL" },
+    { "period": "2026-06-19", "value": 412134, "units": "MBBL" },
+    { "period": "2026-06-12", "value": 418222, "units": "MBBL" },
+    { "period": "2026-06-05", "value": 426485, "units": "MBBL" }
+  ],
+  "steo": {
+    "sourceUrl": "https://www.eia.gov/outlooks/steo/",
+    "revisionFingerprint": "0a2684b009472a16466e7c5cf3a344c4862ff17e1bba0b4880a65a022b21706c",
+    "seriesIds": { "supply": "PAPR_WORLD", "demand": "PATC_WORLD" },
+    "nearTermPoint": {
+      "period": "2026-09",
+      "supplyMbpd": 99.67843324,
+      "demandMbpd": 104.6164277,
+      "balanceMbpd": -4.94,
+      "classification": "forecast"
+    }
+  },
+  "publicSnapshot": {
+    "method": "eia-public-derived-snapshot-v1",
+    "brentWtiSpread": {
+      "period": "2026-08",
+      "brentUsdBbl": 91.08,
+      "wtiUsdBbl": 83.9,
+      "spreadUsdBbl": 7.18,
+      "classification": "derived-public-price-observation"
+    },
+    "inventoryChange": {
+      "latestPeriod": "2026-08-28",
+      "previousPeriod": "2026-08-21",
+      "latestThousandBarrels": 424460,
+      "previousThousandBarrels": 428910,
+      "deltaThousandBarrels": -4450,
+      "deltaPct": -1.0375,
+      "classification": "derived-public-inventory-observation"
+    },
+    "nearTermBalance": {
+      "period": "2026-09",
+      "supplyMbpd": 99.67843324,
+      "demandMbpd": 104.6164277,
+      "balanceMbpd": -4.94,
+      "classification": "forecast"
+    },
+    "limitations": [
+      "Brent–WTI spread is a same-period arithmetic difference between public EIA monthly spot-price observations.",
+      "Inventory change is the arithmetic difference between the two latest distinct public EIA weekly observations supplied to the calculation.",
+      "Near-term balance is an EIA STEO forecast, not observed physical availability or a final actual.",
+      "These metrics are descriptive and are not combined into a bullish/bearish score or used to infer market causality."
+    ]
+  },
+  "publicEvidenceManifest": {
+    "method": "lastbarrel-public-evidence-manifest-v1",
+    "generatedAt": "2026-09-07T03:42:53.832Z",
+    "observations": [
+      { "evidenceId": "eia:RBRTE:2026-08", "metric": "Brent spot price", "classification": "observed-public", "provider": "EIA", "seriesId": "RBRTE", "period": "2026-08", "value": 91.08, "unit": "USD/bbl", "sourceUrl": "https://www.eia.gov/opendata/", "retrievedAt": "2026-09-07T03:42:53.832Z", "note": null },
+      { "evidenceId": "eia:RWTC:2026-08", "metric": "WTI spot price", "classification": "observed-public", "provider": "EIA", "seriesId": "RWTC", "period": "2026-08", "value": 83.9, "unit": "USD/bbl", "sourceUrl": "https://www.eia.gov/opendata/", "retrievedAt": "2026-09-07T03:42:53.832Z", "note": null },
+      { "evidenceId": "eia:WCESTUS1:2026-08-28", "metric": "U.S. crude inventories excluding SPR", "classification": "observed-public", "provider": "EIA", "seriesId": "WCESTUS1", "period": "2026-08-28", "value": 424460, "unit": "thousand barrels", "sourceUrl": "https://www.eia.gov/opendata/", "retrievedAt": "2026-09-07T03:42:53.832Z", "note": null },
+      { "evidenceId": "eia:WCESTUS1:2026-08-21", "metric": "U.S. crude inventories excluding SPR", "classification": "observed-public", "provider": "EIA", "seriesId": "WCESTUS1", "period": "2026-08-21", "value": 428910, "unit": "thousand barrels", "sourceUrl": "https://www.eia.gov/opendata/", "retrievedAt": "2026-09-07T03:42:53.832Z", "note": null },
+      { "evidenceId": "eia:PAPR_WORLD:2026-09", "metric": "World liquid fuels supply", "classification": "forecast-public", "provider": "EIA", "seriesId": "PAPR_WORLD", "period": "2026-09", "value": 99.67843324, "unit": "million barrels per day", "sourceUrl": "https://www.eia.gov/outlooks/steo/", "retrievedAt": "2026-09-07T03:42:53.832Z", "note": "EIA STEO forecast; not observed physical availability." },
+      { "evidenceId": "eia:PATC_WORLD:2026-09", "metric": "World liquid fuels consumption", "classification": "forecast-public", "provider": "EIA", "seriesId": "PATC_WORLD", "period": "2026-09", "value": 104.6164277, "unit": "million barrels per day", "sourceUrl": "https://www.eia.gov/outlooks/steo/", "retrievedAt": "2026-09-07T03:42:53.832Z", "note": "EIA STEO forecast; not observed physical availability." },
+      { "evidenceId": "unavailable:dubai-price", "metric": "Dubai live price", "classification": "unavailable", "provider": null, "seriesId": null, "period": null, "value": null, "unit": null, "sourceUrl": null, "retrievedAt": null, "note": "No current supported public/licensed source connected." },
+      { "evidenceId": "unavailable:murban-price", "metric": "Murban live price", "classification": "unavailable", "provider": null, "seriesId": null, "period": null, "value": null, "unit": null, "sourceUrl": null, "retrievedAt": null, "note": "No current supported public/licensed source connected." },
+      { "evidenceId": "unavailable:commercial-physical-flow", "metric": "Cargo / vessel / freight intelligence", "classification": "unavailable", "provider": null, "seriesId": null, "period": null, "value": null, "unit": null, "sourceUrl": null, "retrievedAt": null, "note": "Commercial provider has not cleared evidence and rights gates." },
+      { "evidenceId": "unavailable:live-landed-cost", "metric": "Live landed cost", "classification": "unavailable", "provider": null, "seriesId": null, "period": null, "value": null, "unit": null, "sourceUrl": null, "retrievedAt": null, "note": "Current freight, insurance, port-fee and route evidence are not connected." }
+    ],
+    "derivations": [
+      { "evidenceId": "derived:brent-wti-spread:2026-08", "metric": "Brent-WTI spread", "classification": "derived-public", "method": "RBRTE minus RWTC for the same monthly period", "inputEvidenceIds": ["eia:RBRTE:2026-08", "eia:RWTC:2026-08"], "period": "2026-08", "value": 7.18, "unit": "USD/bbl", "note": "Arithmetic spread only; not a directional market signal." },
+      { "evidenceId": "derived:inventory-change:2026-08-21:2026-08-28", "metric": "U.S. crude inventory change", "classification": "derived-public", "method": "latest distinct WCESTUS1 observation minus previous distinct observation", "inputEvidenceIds": ["eia:WCESTUS1:2026-08-28", "eia:WCESTUS1:2026-08-21"], "period": "2026-08-28", "value": -4450, "unit": "thousand barrels", "note": "Arithmetic change only; not a causal explanation for oil-price movement." },
+      { "evidenceId": "forecast-derived:world-balance:2026-09", "metric": "Near-term implied world balance", "classification": "forecast", "method": "PAPR_WORLD minus PATC_WORLD, rounded to 2 decimals", "inputEvidenceIds": ["eia:PAPR_WORLD:2026-09", "eia:PATC_WORLD:2026-09"], "period": "2026-09", "value": -4.94, "unit": "million barrels per day", "note": "Revision fingerprint 0a2684b009472a16466e7c5cf3a344c4862ff17e1bba0b4880a65a022b21706c. Forecast, not observed physical flow." }
+    ],
+    "integrity": {
+      "steoRevisionFingerprint": "0a2684b009472a16466e7c5cf3a344c4862ff17e1bba0b4880a65a022b21706c",
+      "limitations": [
+        "Observed-public records are public EIA observations; derived-public records are reproducible arithmetic transforms of those records.",
+        "Forecast-public and forecast derivations remain EIA STEO forecasts, not observed cargo flows or final actuals.",
+        "Unavailable records are explicit product evidence gaps and are never replaced with zero or demonstration values.",
+        "The manifest proves arithmetic/source lineage, not market causality or trading direction."
+      ]
+    }
+  },
+  "sourceFingerprint": "df6bec856e7074cac3b997b6939fffb02c850f0fbc3032d377ef54544c86c756"
+}
