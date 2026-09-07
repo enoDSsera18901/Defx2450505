@@ -42,6 +42,7 @@ const SOURCE_URL = 'https://www.eia.gov/opendata/';
 const STEO_URL = 'https://www.eia.gov/outlooks/steo/';
 const FINGERPRINT_METHOD = 'sha256 of canonical RBRTE/RWTC/WCESTUS1 observations plus linked STEO revision/near-term point';
 const SHA256 = /^[a-f0-9]{64}$/;
+const TIMESTAMP_SENTINEL = '1970-01-01T00:00:00.000Z';
 
 function validDate(value: string) {
   return typeof value === 'string' && value.length > 0 && !Number.isNaN(Date.parse(value));
@@ -75,7 +76,7 @@ export function fingerprintPublicMarketSource(snapshot: Pick<PublicMarketArchive
   return crypto.createHash('sha256').update(JSON.stringify(canonicalFingerprintInput(snapshot))).digest('hex');
 }
 
-function validateSeries(series: PublicSeriesObservation[], label: string, minimum: number, errors: string[]) {
+function validateSeries(series: PublicSeriesObservation[] | null | undefined, label: string, minimum: number, errors: string[]) {
   if (!Array.isArray(series) || series.length < minimum) {
     errors.push(`${label} must contain at least ${minimum} observation${minimum === 1 ? '' : 's'}`);
     return;
@@ -94,6 +95,17 @@ function validateSeries(series: PublicSeriesObservation[], label: string, minimu
 
 function semantic(value: unknown) {
   return JSON.stringify(value);
+}
+
+function normalizationSemantics(snapshot: PublicMarketArchiveSnapshot) {
+  const normalized = JSON.parse(JSON.stringify(snapshot)) as PublicMarketArchiveSnapshot;
+  normalized.retrievedAt = TIMESTAMP_SENTINEL;
+  normalized.publicEvidenceManifest.generatedAt = TIMESTAMP_SENTINEL;
+  normalized.publicEvidenceManifest.observations = normalized.publicEvidenceManifest.observations.map((item) => ({
+    ...item,
+    retrievedAt: item.retrievedAt === null ? null : TIMESTAMP_SENTINEL,
+  }));
+  return normalized;
 }
 
 export function validatePublicMarketArchiveSnapshot(snapshot: PublicMarketArchiveSnapshot): string[] {
@@ -214,7 +226,7 @@ export function writePublicMarketArchiveSnapshot(snapshot: PublicMarketArchiveSn
 
   if (fs.existsSync(filePath)) {
     const existing = readPublicMarketArchiveSnapshot(filePath);
-    if (semantic({ ...existing, retrievedAt: snapshot.retrievedAt, publicEvidenceManifest: snapshot.publicEvidenceManifest }) !== semantic(snapshot)) {
+    if (semantic(normalizationSemantics(existing)) !== semantic(normalizationSemantics(snapshot))) {
       throw new Error('Existing public market snapshot fingerprint maps to different normalized contents');
     }
     return { path: filePath, created: false, fingerprint: snapshot.sourceFingerprint };
