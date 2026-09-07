@@ -100,6 +100,11 @@ function semantic(value: unknown) {
 function normalizationSemantics(snapshot: PublicMarketArchiveSnapshot) {
   const normalized = JSON.parse(JSON.stringify(snapshot)) as PublicMarketArchiveSnapshot;
   normalized.retrievedAt = TIMESTAMP_SENTINEL;
+  normalized.prices = {
+    brent: canonicalSeries(normalized.prices.brent),
+    wti: canonicalSeries(normalized.prices.wti),
+  } as PublicMarketArchiveSnapshot['prices'];
+  normalized.inventories = canonicalSeries(normalized.inventories) as PublicMarketArchiveSnapshot['inventories'];
   normalized.publicEvidenceManifest.generatedAt = TIMESTAMP_SENTINEL;
   normalized.publicEvidenceManifest.observations = normalized.publicEvidenceManifest.observations.map((item) => ({
     ...item,
