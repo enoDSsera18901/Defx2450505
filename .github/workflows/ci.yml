@@ -75,7 +75,13 @@ jobs:
           grep -F 'Oil market overview' /tmp/home.html
           grep -F 'Physical providers not connected' /tmp/home.html
           grep -F 'STEO Revisions' /tmp/home.html
+          grep -F 'Review STEO changes' /tmp/home.html
+          grep -F 'Open Scenario Lab' /tmp/home.html
           grep -F 'Open revision history' /tmp/home.html
+          if grep -F 'Export brief' /tmp/home.html || grep -F '+ Create alert' /tmp/home.html; then
+            echo 'Overview must not advertise unimplemented actions.'
+            exit 1
+          fi
           curl --fail --silent --show-error http://127.0.0.1:3000/api/steo/revisions -o /tmp/revisions.json
           node <<'NODE'
           const fs = require('node:fs');

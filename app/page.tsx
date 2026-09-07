@@ -80,7 +80,10 @@ export default function Home() {
             <h1>Oil market overview</h1>
             <p className="subtle">Public price, inventory and STEO outlook data with explicit physical-data gaps.</p>
           </div>
-          <div className="topActions"><button className="ghost">Export brief</button><button className="primary">+ Create alert</button></div>
+          <div className="topActions">
+            <a className="ghost" href="/revisions" style={{ textDecoration: 'none' }}>Review STEO changes</a>
+            <a className="primary" href="/scenarios" style={{ textDecoration: 'none' }}>Open Scenario Lab</a>
+          </div>
         </header>
 
         <section className="card" style={{ marginBottom: 18 }}>
