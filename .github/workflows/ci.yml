@@ -76,6 +76,13 @@ jobs:
           grep -F 'Physical providers not connected' /tmp/home.html
           grep -F 'STEO Revisions' /tmp/home.html
           grep -F 'Open revision history' /tmp/home.html
+          curl --fail --silent --show-error http://127.0.0.1:3000/api/steo/revisions -o /tmp/revisions.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = JSON.parse(fs.readFileSync('/tmp/revisions.json', 'utf8'));
+          if (payload.status !== 'available') throw new Error(`Expected available revision intelligence, got ${payload.status}: ${payload.error ?? ''}`);
+          if (payload.data?.archive?.vintageCount !== 8) throw new Error(`Expected 8 packaged official vintages, got ${payload.data?.archive?.vintageCount}`);
+          NODE
           curl --fail --silent --show-error http://127.0.0.1:3000/revisions -o /tmp/revisions.html
           grep -F 'What changed between STEO releases?' /tmp/revisions.html
           grep -F 'not explanations of market causality' /tmp/revisions.html
