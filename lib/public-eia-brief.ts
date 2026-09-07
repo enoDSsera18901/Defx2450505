@@ -1,3 +1,4 @@
+import type { PublicEvidenceManifest } from './public-evidence-manifest';
 import type { PublicMarketSnapshot } from './public-market-snapshot';
 import type { SteoRevisionIntelligence } from './steo-revision-intelligence';
 
@@ -11,6 +12,7 @@ export type PublicEiaBriefMarket = {
     wti: Array<{ period: string; value: number }>;
   };
   publicSnapshot: PublicMarketSnapshot;
+  publicEvidenceManifest: PublicEvidenceManifest;
 };
 
 function signed(value: number, decimals = 2) {
@@ -42,6 +44,31 @@ function revisionRows(revisions: SteoRevisionIntelligence | null) {
   return lines;
 }
 
+function evidenceRows(manifest: PublicEvidenceManifest) {
+  const lines = [
+    `- Manifest method: ${manifest.method}.`,
+    `- Manifest generated: ${manifest.generatedAt}.`,
+  ];
+
+  const orderedMetrics = [
+    'Brent-WTI spread',
+    'U.S. crude inventory change',
+    'Near-term implied world balance',
+  ];
+  for (const metric of orderedMetrics) {
+    const item = manifest.derivations.find((candidate) => candidate.metric === metric);
+    if (!item) {
+      lines.push(`- ${metric}: no derived evidence ID because the required source inputs were unavailable.`);
+      continue;
+    }
+    lines.push(`- ${metric}: ${item.evidenceId}; inputs ${item.inputEvidenceIds.join(', ')}; method ${item.method}.`);
+  }
+
+  const unavailable = manifest.observations.filter((item) => item.classification === 'unavailable');
+  lines.push(`- Explicit unavailable evidence records: ${unavailable.map((item) => item.evidenceId).join(', ')}.`);
+  return lines;
+}
+
 export function buildPublicEiaBrief(input: {
   generatedAt: string;
   market: PublicEiaBriefMarket;
@@ -51,6 +78,9 @@ export function buildPublicEiaBrief(input: {
   if (Number.isNaN(Date.parse(generatedAt))) throw new Error('Public EIA brief generatedAt must be date-compatible');
   if (!market?.source?.trim() || !market?.sourceUrl?.trim()) throw new Error('Public EIA brief requires source identity');
   if (Number.isNaN(Date.parse(market.observedAt))) throw new Error('Public EIA brief market observedAt must be date-compatible');
+  if (market.publicEvidenceManifest?.method !== 'lastbarrel-public-evidence-manifest-v1') {
+    throw new Error('Public EIA brief requires a valid public evidence manifest');
+  }
 
   const brent = latestPrice(market.prices?.brent ?? []);
   const wti = latestPrice(market.prices?.wti ?? []);
@@ -74,6 +104,10 @@ export function buildPublicEiaBrief(input: {
     `- Brent–WTI spread: ${spread ? `${signed(spread.spreadUsdBbl)} USD/bbl (${spread.period}, derived from same-period public observations)` : 'unavailable; no common valid public period'}.`,
     `- U.S. crude inventory change: ${inventory ? `${signed(inventory.deltaThousandBarrels / 1000)} million bbl (${inventory.previousPeriod} → ${inventory.latestPeriod}, derived)` : 'unavailable; fewer than two distinct valid public observations'}.`,
     `- Near-term implied world balance: ${balance ? `${signed(balance.balanceMbpd)} m b/d (${balance.period}, EIA STEO forecast)` : 'unavailable'}.`,
+    '',
+    '## Evidence lineage',
+    '',
+    ...evidenceRows(market.publicEvidenceManifest),
     '',
     '## Official STEO revision context',
     '',
