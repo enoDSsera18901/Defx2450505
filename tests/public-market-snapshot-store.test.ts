@@ -145,7 +145,7 @@ test('rejects tampered derived snapshot values and source fingerprints', () => {
   tampered.publicSnapshot.brentWtiSpread.spreadUsdBbl = 99;
   const errors = validatePublicMarketArchiveSnapshot(tampered);
   assert.ok(errors.some((error) => error.includes('publicSnapshot does not reproduce')));
-  assert.ok(errors.some((error) => error.includes('publicEvidenceManifest')));
+  assert.ok(errors.some((error) => error.includes('cannot reproduce Brent-WTI spread arithmetic')));
 
   const wrongFingerprint = JSON.parse(JSON.stringify(snapshot));
   wrongFingerprint.sourceFingerprint = 'd'.repeat(64);
