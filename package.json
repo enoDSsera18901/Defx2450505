@@ -12,7 +12,7 @@
     "test:trial": "tsx --test tests/provider-trial.test.ts tests/provider-commercial-rights.test.ts tests/provider-integration-decision.test.ts",
     "test:market-snapshot": "tsx --test tests/public-market-snapshot.test.ts",
     "test:evidence-manifest": "tsx --test tests/public-evidence-manifest.test.ts",
-    "test:public-archive": "tsx --test tests/public-market-snapshot-store.test.ts",
+    "test:public-archive": "tsx --test tests/public-market-snapshot-store.test.ts tests/public-market-snapshot-archive-integrity.test.ts",
     "test:public-brief": "tsx --test tests/public-eia-brief.test.ts",
     "test:landed": "tsx --test tests/landed-cost.test.ts tests/landed-cost-analysis.test.ts",
     "test:scenario": "tsx --test tests/landed-scenario.test.ts",
