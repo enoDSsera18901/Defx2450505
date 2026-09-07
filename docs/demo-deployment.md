@@ -83,4 +83,4 @@ Do not mark the release externally deployed until those observations have been m
 - No live commercial freight/cargo/vessel intelligence is presented.
 - Scenario Lab assumptions are entered by the analyst and are not market observations.
 - Pinned Scenario Lab baselines are intentionally in-memory and disappear on refresh.
-- The repository currently installs dependencies with `npm install`; a future reproducibility increment should add/maintain a committed lockfile before stronger production release claims.
+- Dependency resolution is pinned by the committed `package-lock.json`; CI, live-data evidence workflows and production container builds use `npm ci`.
