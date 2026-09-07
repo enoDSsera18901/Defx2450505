@@ -221,8 +221,7 @@ test('unresolved supplied references remain explicit and block trial completenes
 });
 
 test('missing or invalid reference catalog blocks canonical diversity claims', () => {
-  const dataset = completeDataset() as ProviderTrialDataset & { referenceCatalog?: PhysicalReferenceCatalog };
-  delete dataset.referenceCatalog;
+  const dataset = { ...completeDataset(), referenceCatalog: undefined };
 
   const report = evaluateProviderTrial(dataset);
   assert.equal(report.referenceResolution.catalogAvailable, false);
