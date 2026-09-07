@@ -119,7 +119,7 @@ test('accepts a formula-backed Dates!D7 only when its cached value matches the i
   assert.equal(lineage.metadata.historicalThroughFormula, 'MAX(C11:F11*(C13:F13=1))');
   assert.equal(
     lineage.formulaPolicy,
-    'economic-values-and-flags-reject-formulas;Dates-row11-and-D7-cache-require-independent-crosschecks-v1',
+    'economic-values-reject-formulas;Dates-row11-row13-and-D7-cache-require-independent-crosschecks-v1',
   );
 });
 
@@ -154,6 +154,27 @@ test('rejects a formula-backed row-11 period cache that breaks the issue-anchore
   assert.throws(
     () => buildOfficialSteoWorkbookLineage(structure, semanticVintage()),
     /Dates!C11 does not match the issue-anchored monthly period sequence/,
+  );
+});
+
+test('accepts formula-backed row-13 flags only when their cached values match the validated boundary', async () => {
+  const datesXml = DATES_XML.replace(
+    '<c r="C13"><v>1</v></c>',
+    '<c r="C13"><f>--(C11&lt;202608)</f><v>1</v></c>',
+  );
+  const structure = await inspectOfficialSteoWorkbookStructure(zipWorkbook({ datesXml }));
+  assert.doesNotThrow(() => buildOfficialSteoWorkbookLineage(structure, semanticVintage()));
+});
+
+test('rejects a formula-backed row-13 flag when its cached value disagrees with the validated boundary', async () => {
+  const datesXml = DATES_XML.replace(
+    '<c r="C13"><v>1</v></c>',
+    '<c r="C13"><f>0</f><v>0</v></c>',
+  );
+  const structure = await inspectOfficialSteoWorkbookStructure(zipWorkbook({ datesXml }));
+  assert.throws(
+    () => buildOfficialSteoWorkbookLineage(structure, semanticVintage()),
+    /Dates!C13 does not match the independently validated historical\/forecast boundary/,
   );
 });
 
