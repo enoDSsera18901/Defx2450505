@@ -74,6 +74,11 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:3000/ -o /tmp/home.html
           grep -F 'Oil market overview' /tmp/home.html
           grep -F 'Physical providers not connected' /tmp/home.html
+          grep -F 'STEO Revisions' /tmp/home.html
+          grep -F 'Open revision history' /tmp/home.html
+          curl --fail --silent --show-error http://127.0.0.1:3000/revisions -o /tmp/revisions.html
+          grep -F 'What changed between STEO releases?' /tmp/revisions.html
+          grep -F 'not explanations of market causality' /tmp/revisions.html
           curl --fail --silent --show-error http://127.0.0.1:3000/scenarios -o /tmp/scenarios.html
           grep -F 'Landed cost scenario lab' /tmp/scenarios.html
           grep -F 'NOT LIVE PHYSICAL DATA' /tmp/scenarios.html
