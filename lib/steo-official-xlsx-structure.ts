@@ -19,6 +19,7 @@ export const OFFICIAL_STEO_XLSX_STRUCTURE_LIMITS = {
 export type OfficialSteoMappedPeriodLineage = {
   period: string;
   periodCell: string;
+  periodFormula: string | null;
   historicalFlagCell: string;
   supplyCells: string[];
   demandCells: string[];
@@ -27,7 +28,7 @@ export type OfficialSteoMappedPeriodLineage = {
 export type OfficialSteoWorkbookLineage = {
   schemaVersion: 1;
   relationshipPolicy: 'required-sheets-must-use-safe-internal-worksheet-relationships-v1';
-  formulaPolicy: 'mapped-cells-reject-formulas-except-Dates-D7-with-redundant-boundary-crosscheck-v1';
+  formulaPolicy: 'economic-values-and-flags-reject-formulas;Dates-row11-and-D7-cache-require-independent-crosschecks-v1';
   archiveLimits: typeof OFFICIAL_STEO_XLSX_STRUCTURE_LIMITS;
   sheets: {
     Dates: string;
@@ -137,6 +138,15 @@ function columnName(index: number) {
     value = Math.floor(value / 26);
   }
   return result;
+}
+
+function addMonths(period: string, offset: number) {
+  const match = period.match(/^(\d{4})-(\d{2})$/);
+  if (!match) throw new Error(`Invalid anchored STEO period ${period}`);
+  const total = Number(match[1]) * 12 + Number(match[2]) - 1 + offset;
+  const year = Math.floor(total / 12);
+  const month = (total % 12) + 1;
+  return `${year}-${String(month).padStart(2, '0')}`;
 }
 
 function directChild(element: XmlElement, name: string): XmlElement | undefined {
@@ -372,12 +382,18 @@ export function buildOfficialSteoWorkbookLineage(
 
   const supplyRows = findSeriesRows(balance, 'PAPR_WORLD');
   const demandRows = findSeriesRows(balance, 'PATC_WORLD');
+  const forecastStartIndex = vintage.historical.length;
   const periods = vintage.revisionBasis.map((point, index) => {
     const column = columnName(index + 3);
     const periodRef = `${column}11`;
     const flagRef = `${column}13`;
-    requireNumeric(dates, periodRef);
+    const periodCell = requireNumeric(dates, periodRef, true);
     requireNumeric(dates, flagRef);
+    const expectedPeriod = addMonths(vintage.issue, index - forecastStartIndex);
+    const cachedPeriod = String(Math.trunc(Number(periodCell.value))).padStart(6, '0');
+    if (cachedPeriod !== expectedPeriod.replace('-', '') || point.period !== expectedPeriod) {
+      throw new Error(`Official STEO XLSX mapped cell Dates!${periodRef} does not match the issue-anchored monthly period sequence`);
+    }
     const supplyCells = supplyRows.map((row) => {
       const ref = `${column}${row}`;
       requireNumeric(balance, ref);
@@ -391,6 +407,7 @@ export function buildOfficialSteoWorkbookLineage(
     return {
       period: point.period,
       periodCell: `Dates!${periodRef}`,
+      periodFormula: periodCell.formula,
       historicalFlagCell: `Dates!${flagRef}`,
       supplyCells,
       demandCells,
@@ -400,7 +417,7 @@ export function buildOfficialSteoWorkbookLineage(
   return {
     schemaVersion: 1,
     relationshipPolicy: 'required-sheets-must-use-safe-internal-worksheet-relationships-v1',
-    formulaPolicy: 'mapped-cells-reject-formulas-except-Dates-D7-with-redundant-boundary-crosscheck-v1',
+    formulaPolicy: 'economic-values-and-flags-reject-formulas;Dates-row11-and-D7-cache-require-independent-crosschecks-v1',
     archiveLimits: OFFICIAL_STEO_XLSX_STRUCTURE_LIMITS,
     sheets: { Dates: dates.part, '3atab': balance.part },
     metadata: {
