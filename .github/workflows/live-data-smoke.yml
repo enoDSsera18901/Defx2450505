@@ -106,6 +106,9 @@ jobs:
           grep -F "One-at-a-time sensitivity" /tmp/scenario-page.js
           grep -F "Why this total exists" /tmp/scenario-page.js
           grep -F "Scenario Lab analyst stress" /tmp/scenario-page.js
+          grep -F "Pin current as baseline" /tmp/scenario-page.js
+          grep -F "Current versus pinned baseline" /tmp/scenario-page.js
+          grep -F "Lost on refresh; not a historical market observation." /tmp/scenario-page.js
       - name: Show server log on failure
         if: failure()
         run: cat /tmp/lastbarrel.log || true
