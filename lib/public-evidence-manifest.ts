@@ -57,6 +57,10 @@ function close(a: number, b: number) {
   return Math.abs(a - b) <= EPSILON;
 }
 
+function canonicalBalance(supply: number, demand: number) {
+  return Number((supply - demand).toFixed(2));
+}
+
 function requireDate(value: string, name: string) {
   if (Number.isNaN(Date.parse(value))) throw new Error(`${name} must be date-compatible`);
 }
@@ -190,8 +194,8 @@ export function buildPublicEvidenceManifest(input: {
     if (!close(balance.supplyMbpd, point.supplyMbpd) || !close(balance.demandMbpd, point.demandMbpd) || !close(balance.balanceMbpd, point.balanceMbpd)) {
       throw new Error('Evidence manifest cannot reproduce near-term STEO balance values');
     }
-    if (!close(balance.balanceMbpd, balance.supplyMbpd - balance.demandMbpd)) {
-      throw new Error('Evidence manifest cannot reproduce near-term STEO balance arithmetic');
+    if (!close(balance.balanceMbpd, canonicalBalance(balance.supplyMbpd, balance.demandMbpd))) {
+      throw new Error('Evidence manifest cannot reproduce canonical near-term STEO balance arithmetic');
     }
 
     const supplyId = obsId(input.steo.seriesIds.supply, balance.period);
@@ -228,7 +232,7 @@ export function buildPublicEvidenceManifest(input: {
       evidenceId: `forecast-derived:world-balance:${balance.period}`,
       metric: 'Near-term implied world balance',
       classification: 'forecast',
-      method: `${input.steo.seriesIds.supply} minus ${input.steo.seriesIds.demand}`,
+      method: `${input.steo.seriesIds.supply} minus ${input.steo.seriesIds.demand}, rounded to 2 decimals`,
       inputEvidenceIds: [supplyId, demandId],
       period: balance.period,
       value: balance.balanceMbpd,
