@@ -35,6 +35,15 @@ if (jsonOnly) {
       `${report.cargoCoverage.withDestination}/${report.cargoCoverage.cargoes} destination`,
   );
   console.log(
+    `Reference identity: ${report.referenceResolution.resolved}/${report.referenceResolution.fieldsPresent} supplied fields resolved, ` +
+      `${report.referenceResolution.ambiguous} ambiguous, ${report.referenceResolution.unresolved} unresolved`,
+  );
+  console.log(
+    `Grade diversity: ${report.cargoCoverage.distinctCanonicalGrades} canonical from ` +
+      `${report.cargoCoverage.distinctRawGradeLabels} raw label(s); ` +
+      `routes: ${report.cargoCoverage.distinctCanonicalRoutes} canonical from ${report.cargoCoverage.distinctRawRoutes} raw pair(s)`,
+  );
+  console.log(
     `Freshness: ${report.freshness.fresh} fresh, ${report.freshness.stale} stale, ` +
       `${report.freshness.unknown} unknown, ${report.freshness.future} future`,
   );
@@ -42,6 +51,17 @@ if (jsonOnly) {
 
   for (const check of report.checks) {
     console.log(`${check.pass ? 'PASS' : 'FAIL'}  ${check.id}: ${check.detail}`);
+  }
+
+  if (report.referenceResolution.issues.length) {
+    console.log('\nReference-resolution issues:');
+    report.referenceResolution.issues.forEach((issue) => {
+      const candidates = issue.candidateIds.length ? ` candidates=${issue.candidateIds.join(',')}` : '';
+      console.log(
+        `- ${issue.status.toUpperCase()} ${issue.recordKind}:${issue.recordId}.${issue.field} ` +
+          `raw=${JSON.stringify(issue.rawValue)}${candidates} sources=${issue.sourceRecordIds.join(',')}`,
+      );
+    });
   }
 
   if (report.errors.length) {
