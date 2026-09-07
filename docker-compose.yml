@@ -1,0 +1,8 @@
+services:
+  lastbarrel:
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      EIA_API_KEY: "${EIA_API_KEY:-}"
+    restart: unless-stopped
