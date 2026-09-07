@@ -9,7 +9,7 @@
     "lint": "next lint",
     "test:physical": "tsx --test tests/physical-data.test.ts tests/physical-reference.test.ts",
     "test:provider": "tsx --test tests/physical-provider.test.ts",
-    "test:trial": "tsx --test tests/provider-trial.test.ts",
+    "test:trial": "tsx --test tests/provider-trial.test.ts tests/provider-commercial-rights.test.ts",
     "test:landed": "tsx --test tests/landed-cost.test.ts tests/landed-cost-analysis.test.ts",
     "test:scenario": "tsx --test tests/landed-scenario.test.ts",
     "test:steo-revision": "tsx --test tests/steo-revision.test.ts",
@@ -20,7 +20,8 @@
     "steo:backtest": "tsx scripts/backtest-steo-snapshots.ts",
     "steo:import-official": "tsx scripts/import-steo-official-vintages.ts",
     "steo:backtest-official": "tsx scripts/backtest-steo-official-vintages.ts",
-    "trial:report": "tsx scripts/provider-trial-report.ts"
+    "trial:report": "tsx scripts/provider-trial-report.ts",
+    "commercial:report": "tsx scripts/provider-commercial-rights-report.ts"
   },
   "dependencies": {
     "next": "15.5.24",
