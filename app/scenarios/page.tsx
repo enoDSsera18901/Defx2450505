@@ -14,7 +14,9 @@ import {
 } from '../../lib/landed-cost';
 import {
   analyzeLandedCostSensitivity,
+  compareLandedCostInputs,
   explainLandedCost,
+  type LandedCostComparisonResult,
   type LandedCostEvidenceChain,
   type LandedCostSensitivityResult,
 } from '../../lib/landed-cost-analysis';
@@ -70,6 +72,11 @@ function monthlyPeriodAsIso(period: string | undefined): string | null {
   return Number.isNaN(Date.parse(value)) ? null : value;
 }
 
+function signedMoney(value: number) {
+  if (Math.abs(value) < 0.0000001) return '$0.00';
+  return `${value > 0 ? '+' : '−'}$${Math.abs(value).toFixed(2)}`;
+}
+
 export default function ScenarioLabPage() {
   const [market, setMarket] = useState<MarketPayload | null>(null);
   const [feedState, setFeedState] = useState<'loading' | 'live' | 'unavailable'>('loading');
@@ -85,6 +92,8 @@ export default function ScenarioLabPage() {
   const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>('absolute_per_bbl');
   const [sensitivityValue, setSensitivityValue] = useState('1');
   const [sensitivityInputError, setSensitivityInputError] = useState<string | null>(null);
+  const [baselineInput, setBaselineInput] = useState<LandedCostInput | null>(null);
+  const [comparison, setComparison] = useState<LandedCostComparisonResult | null>(null);
 
   useEffect(() => {
     fetch('/api/market')
@@ -113,6 +122,7 @@ export default function ScenarioLabPage() {
           sourceRecordId: `EIA:RBRTE:${latestBrent.period}`,
         }
       : null;
+  const baselineResult = baselineInput ? calculateLandedCost(baselineInput) : null;
 
   function resetOutputs() {
     setResult(null);
@@ -120,6 +130,7 @@ export default function ScenarioLabPage() {
     setEvidence(null);
     setSensitivity(null);
     setSensitivityInputError(null);
+    setComparison(null);
   }
 
   function setField(field: keyof FormValues, value: string) {
@@ -157,10 +168,26 @@ export default function ScenarioLabPage() {
     setEvidence(explained);
     setSensitivity(null);
     setSensitivityInputError(null);
+    setComparison(
+      baselineInput && calculated.status === 'complete'
+        ? compareLandedCostInputs(`ui-comparison-${baselineInput.calculationId}-${input.calculationId}`, baselineInput, input)
+        : null,
+    );
 
     if (calculated.status === 'complete' && !calculated.components.some((component) => component.kind === sensitivityKind)) {
       setSensitivityKind(calculated.components[0]?.kind ?? 'crude_basis');
     }
+  }
+
+  function pinBaseline() {
+    if (!baseInput || result?.status !== 'complete') return;
+    setBaselineInput(baseInput);
+    setComparison(null);
+  }
+
+  function clearBaseline() {
+    setBaselineInput(null);
+    setComparison(null);
   }
 
   function runSensitivity() {
@@ -318,6 +345,62 @@ export default function ScenarioLabPage() {
                     </div>
                   ))}
                 </div>
+
+                <div className={styles.baselineActions}>
+                  <button className={styles.secondaryButton} type="button" onClick={pinBaseline}>
+                    {baselineInput ? 'Replace comparison baseline' : 'Pin current as baseline'}
+                  </button>
+                  {baselineInput && <button className={styles.secondaryButton} type="button" onClick={clearBaseline}>Clear baseline</button>}
+                </div>
+
+                {baselineResult?.status === 'complete' && (
+                  <div className={styles.baselineBox}>
+                    <div>
+                      <span>PINNED BASELINE · IN-MEMORY SCENARIO</span>
+                      <strong>${baselineResult.amount.toFixed(2)} {baselineResult.currency}/bbl</strong>
+                    </div>
+                    <small>Calculation {baselineResult.calculationId}. Lost on refresh; not a historical market observation.</small>
+                  </div>
+                )}
+
+                {baselineInput && (
+                  <div className={styles.analysisBox}>
+                    <p className={styles.sectionLabel}>SCENARIO COMPARISON</p>
+                    <h3>Current versus pinned baseline</h3>
+                    <p className={styles.analysisText}>Attribution is CURRENT − BASELINE after each component has been normalized to the common USD/bbl basis.</p>
+
+                    {!comparison && <div className={styles.compareEmpty}>Baseline pinned. Change one or more assumptions and calculate again to produce a reconciled comparison.</div>}
+                    {comparison?.status === 'incomplete' && <ul className={styles.errors}>{comparison.errors.map((error) => <li key={error}>{error}</li>)}</ul>}
+                    {comparison?.status === 'complete' && (
+                      <>
+                        <div className={styles.comparisonHero}>
+                          <span>{comparison.evidenceClass.toUpperCase()} COMPARISON · CURRENT − BASELINE</span>
+                          <strong>{signedMoney(comparison.totalDeltaRightMinusLeft)}/bbl</strong>
+                          <small>${comparison.leftLandedCost.toFixed(2)} → ${comparison.rightLandedCost.toFixed(2)} {comparison.currency}/bbl · attribution reconciles to {signedMoney(comparison.attributedDelta)}</small>
+                        </div>
+                        <div className={styles.comparisonList}>
+                          {comparison.components.map((component) => (
+                            <div className={styles.comparisonItem} key={component.componentKind}>
+                              <div className={styles.comparisonTop}>
+                                <strong>{labels[component.componentKind]}</strong>
+                                <span>{signedMoney(component.deltaRightMinusLeft)}</span>
+                              </div>
+                              <div className={styles.comparisonAmounts}>
+                                <span>Baseline: {component.left.included ? `$${component.left.amount.toFixed(2)} · ${component.left.evidenceClass}` : 'not included'}</span>
+                                <span>Current: {component.right.included ? `$${component.right.amount.toFixed(2)} · ${component.right.evidenceClass}` : 'not included'}</span>
+                              </div>
+                              <div className={styles.comparisonSources}>
+                                Baseline sources: {component.left.sourceRecordIds.length ? component.left.sourceRecordIds.join(', ') : 'none'}<br />
+                                Current sources: {component.right.sourceRecordIds.length ? component.right.sourceRecordIds.join(', ') : 'none'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className={styles.aggregationLine}>Method: {comparison.methodId}. Combined source records retained: {comparison.sourceRecordIds.length}.</div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <div className={styles.analysisBox}>
                   <p className={styles.sectionLabel}>ANALYST STRESS · SCENARIO ONLY</p>
