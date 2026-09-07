@@ -28,7 +28,7 @@ export type OfficialSteoMappedPeriodLineage = {
 export type OfficialSteoWorkbookLineage = {
   schemaVersion: 1;
   relationshipPolicy: 'required-sheets-must-use-safe-internal-worksheet-relationships-v1';
-  formulaPolicy: 'economic-values-and-flags-reject-formulas;Dates-row11-and-D7-cache-require-independent-crosschecks-v1';
+  formulaPolicy: 'economic-values-reject-formulas;Dates-row11-row13-and-D7-cache-require-independent-crosschecks-v1';
   archiveLimits: typeof OFFICIAL_STEO_XLSX_STRUCTURE_LIMITS;
   sheets: {
     Dates: string;
@@ -388,7 +388,11 @@ export function buildOfficialSteoWorkbookLineage(
     const periodRef = `${column}11`;
     const flagRef = `${column}13`;
     const periodCell = requireNumeric(dates, periodRef, true);
-    requireNumeric(dates, flagRef);
+    const flagCell = requireNumeric(dates, flagRef, true);
+    const expectedHistoricalFlag = index < forecastStartIndex ? 1 : 0;
+    if (Number(flagCell.value) !== expectedHistoricalFlag) {
+      throw new Error(`Official STEO XLSX mapped cell Dates!${flagRef} does not match the independently validated historical/forecast boundary`);
+    }
     const expectedPeriod = addMonths(vintage.issue, index - forecastStartIndex);
     const cachedPeriod = String(Math.trunc(Number(periodCell.value))).padStart(6, '0');
     if (cachedPeriod !== expectedPeriod.replace('-', '') || point.period !== expectedPeriod) {
@@ -417,7 +421,7 @@ export function buildOfficialSteoWorkbookLineage(
   return {
     schemaVersion: 1,
     relationshipPolicy: 'required-sheets-must-use-safe-internal-worksheet-relationships-v1',
-    formulaPolicy: 'economic-values-and-flags-reject-formulas;Dates-row11-and-D7-cache-require-independent-crosschecks-v1',
+    formulaPolicy: 'economic-values-reject-formulas;Dates-row11-row13-and-D7-cache-require-independent-crosschecks-v1',
     archiveLimits: OFFICIAL_STEO_XLSX_STRUCTURE_LIMITS,
     sheets: { Dates: dates.part, '3atab': balance.part },
     metadata: {
