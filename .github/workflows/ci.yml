@@ -33,6 +33,8 @@ jobs:
         run: npm run test:public-archive
       - name: Public source-state comparison tests
         run: npm run test:public-history
+      - name: Public source-state watch tests
+        run: npm run test:public-watch
       - name: Public EIA brief tests
         run: npm run test:public-brief
       - name: Landed-cost engine tests
