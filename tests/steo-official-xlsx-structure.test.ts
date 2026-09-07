@@ -96,6 +96,7 @@ test('resolves required worksheets through internal relationships and emits exac
     issueCell: 'Dates!D1',
     modelingCompletedCell: 'Dates!D2',
     historicalThroughCell: 'Dates!D7',
+    historicalThroughFormula: null,
   });
   assert.deepEqual(lineage.periods[0], {
     period: '2026-06',
@@ -105,6 +106,32 @@ test('resolves required worksheets through internal relationships and emits exac
     demandCells: ['3atab!C4'],
   });
   assert.equal(lineage.periods.at(-1)?.periodCell, 'Dates!F11');
+});
+
+test('accepts a formula-backed Dates!D7 only when its cached value matches the independently validated boundary', async () => {
+  const datesXml = DATES_XML.replace(
+    '<c r="D7"><v>202607</v></c>',
+    '<c r="D7"><f>MAX(C11:F11*(C13:F13=1))</f><v>202607</v></c>',
+  );
+  const structure = await inspectOfficialSteoWorkbookStructure(zipWorkbook({ datesXml }));
+  const lineage = buildOfficialSteoWorkbookLineage(structure, semanticVintage());
+  assert.equal(lineage.metadata.historicalThroughFormula, 'MAX(C11:F11*(C13:F13=1))');
+  assert.equal(
+    lineage.formulaPolicy,
+    'mapped-cells-reject-formulas-except-Dates-D7-with-redundant-boundary-crosscheck-v1',
+  );
+});
+
+test('rejects a formula-backed Dates!D7 when its cached value disagrees with the validated historical boundary', async () => {
+  const datesXml = DATES_XML.replace(
+    '<c r="D7"><v>202607</v></c>',
+    '<c r="D7"><f>202606</f><v>202606</v></c>',
+  );
+  const structure = await inspectOfficialSteoWorkbookStructure(zipWorkbook({ datesXml }));
+  assert.throws(
+    () => buildOfficialSteoWorkbookLineage(structure, semanticVintage()),
+    /D7 cached value does not match the independently validated historical flag boundary/,
+  );
 });
 
 test('rejects external worksheet relationships', async () => {
@@ -134,7 +161,7 @@ test('rejects a missing required Dates worksheet mapping', async () => {
   );
 });
 
-test('rejects formula-backed mapped evidence even when a cached value exists', async () => {
+test('rejects formula-backed mapped series evidence even when a cached value exists', async () => {
   const balanceXml = BALANCE_XML.replace('<c r="C2"><v>98.97399653</v></c>', '<c r="C2"><f>97+1.97399653</f><v>98.97399653</v></c>');
   const structure = await inspectOfficialSteoWorkbookStructure(zipWorkbook({ balanceXml }));
   assert.throws(
