@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { readSheet } from 'read-excel-file/node';
 import type { OfficialSteoArchiveEntry } from './steo-official-archive-manifest';
+import {
+  buildOfficialSteoWorkbookLineage,
+  inspectOfficialSteoWorkbookStructure,
+  type OfficialSteoWorkbookLineage,
+} from './steo-official-xlsx-structure';
 import { parseOfficialSteoVintage, type OfficialSteoVintage } from './steo-official-vintage';
 
 const MAX_OFFICIAL_STEO_XLSX_BYTES = 15 * 1024 * 1024;
@@ -10,6 +15,12 @@ const OFFICIAL_ARCHIVE_URL = /^https:\/\/www\.eia\.gov\/outlooks\/steo\/archives
 export type FetchedOfficialSteoVintage = {
   vintage: OfficialSteoVintage;
   sourceBytes: Buffer;
+  lineage: OfficialSteoWorkbookLineage;
+};
+
+type ParsedOfficialSteoWorkbook = {
+  vintage: OfficialSteoVintage;
+  lineage: OfficialSteoWorkbookLineage;
 };
 
 function assertOfficialArchiveUrl(url: string) {
@@ -26,15 +37,22 @@ async function parseWorkbookBuffer(
   buffer: Buffer,
   entry: OfficialSteoArchiveEntry,
   importedAt: string,
-): Promise<OfficialSteoVintage> {
+): Promise<ParsedOfficialSteoWorkbook> {
   assertXlsxBuffer(buffer);
+
+  // Inspect the central directory and the exact workbook/worksheet relationship graph before
+  // handing the archive to the higher-level worksheet decoder. This bounds decompression risk
+  // and establishes which XML parts are authoritative for Dates and 3atab.
+  const structure = await inspectOfficialSteoWorkbookStructure(buffer);
   const sourceArtifactSha256 = createHash('sha256').update(buffer).digest('hex');
   const [datesRows, balanceRows] = await Promise.all([
     readSheet(buffer, 'Dates'),
     readSheet(buffer, '3atab'),
   ]);
 
-  return parseOfficialSteoVintage({
+  // Existing semantic validation remains the authority for source period alignment,
+  // classifications, duplicate-series consistency and normalized calculations.
+  const vintage = parseOfficialSteoVintage({
     datesRows,
     balanceRows,
     issue: entry.issue,
@@ -43,6 +61,11 @@ async function parseWorkbookBuffer(
     sourceArtifactUrl: entry.sourceArtifactUrl,
     sourceArtifactSha256,
   });
+
+  // Bind the semantically accepted values back to exact workbook coordinates. Formula-backed
+  // or non-numeric mapped evidence cells fail here even if a library exposes a cached value.
+  const lineage = buildOfficialSteoWorkbookLineage(structure, vintage);
+  return { vintage, lineage };
 }
 
 export async function fetchOfficialSteoVintageWithSource(
@@ -60,8 +83,8 @@ export async function fetchOfficialSteoVintageWithSource(
     throw new Error('Official EIA STEO archive workbook exceeds the 15 MiB safety limit');
   }
   const sourceBytes = Buffer.from(await response.arrayBuffer());
-  const vintage = await parseWorkbookBuffer(sourceBytes, entry, importedAt);
-  return { vintage, sourceBytes };
+  const parsed = await parseWorkbookBuffer(sourceBytes, entry, importedAt);
+  return { ...parsed, sourceBytes };
 }
 
 export async function fetchOfficialSteoVintage(
@@ -78,5 +101,5 @@ export async function readOfficialSteoVintageWorkbook(
 ): Promise<OfficialSteoVintage> {
   assertOfficialArchiveUrl(entry.sourceArtifactUrl);
   const buffer = await readFile(filePath);
-  return parseWorkbookBuffer(buffer, entry, importedAt);
+  return (await parseWorkbookBuffer(buffer, entry, importedAt)).vintage;
 }

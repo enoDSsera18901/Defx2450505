@@ -19,7 +19,7 @@
     "test:steo-revision": "tsx --test tests/steo-revision.test.ts",
     "test:steo-archive": "tsx --test tests/steo-snapshot-store.test.ts",
     "test:steo-backtest": "tsx --test tests/steo-backtest.test.ts",
-    "test:steo-official": "tsx --test tests/steo-official-vintage.test.ts tests/steo-official-vintage-integrity.test.ts tests/steo-official-source-artifact.test.ts tests/steo-revision-intelligence.test.ts",
+    "test:steo-official": "tsx --test tests/steo-official-vintage.test.ts tests/steo-official-vintage-integrity.test.ts tests/steo-official-source-artifact.test.ts tests/steo-official-xlsx-structure.test.ts tests/steo-revision-intelligence.test.ts",
     "public:capture": "tsx scripts/capture-public-market-snapshot.ts",
     "steo:capture": "tsx scripts/capture-steo-snapshot.ts",
     "steo:backtest": "tsx scripts/backtest-steo-snapshots.ts",
@@ -30,15 +30,18 @@
     "provider:decision": "tsx scripts/provider-integration-decision.ts"
   },
   "dependencies": {
+    "@xmldom/xmldom": "^0.9.12",
     "next": "15.5.24",
     "react": "19.0.8",
     "react-dom": "19.0.8",
-    "read-excel-file": "9.2.0"
+    "read-excel-file": "9.2.0",
+    "unzipper-esm": "^0.13.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "fflate": "^0.8.3",
     "tsx": "4.23.13",
     "typescript": "^5.7.2"
   }
